@@ -1,0 +1,494 @@
+---
+title: "big data first task"
+author: "Ariel & Eitan & Yuval"
+date: "2024-07-27"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load libraries
+```{r libraries}
+library(pacman)
+pacman::p_load(
+  tidyverse, 
+  readr, 
+  skimr, 
+  knitr,
+  dplyr,
+  tidyr
+)
+library(ggplot2)
+library(scales)
+```
+
+## Load Data
+```{r}
+listings_data <- read_csv('listings_clean.csv')
+calendar_data <- read_csv('calendar_clean.csv')
+```
+
+
+# Part 1 - Descriptive Statistics
+```{r}
+summary(listings_data)
+skim(listings_data)
+```
+- no missing values for the price_dollars
+- no missing values for beds
+
+- המחיר הוא מחיר קטלוג כלומר המחיר שיש בטבלה הזו זה המחיר שבכל הנכס ראה לנכון לרשום לראושנה.
+------------------------------------------------------------------
+
+## Single Variable Visualizations
+### Plot 1: Distribution of Prices
+
+```{r}
+#ggplot(listings_data, aes(x = price_dollars)) +
+#  geom_histogram(fill = "blue", color = "black", bins = 50) +
+#  labs(title = "Distribution of Nightly Prices", x = "Price (Dollars)", y = "Frequency") +
+#  theme_minimal()
+```
+
+```{r, echo=TRUE, fig.width=12, fig.height=6}
+# Set the number of bins
+# num_bins <- 50
+
+# Calculate the bin width
+# bin_width <- (max(listings_data$price_dollars, na.rm = TRUE) - min(listings_data$price_dollars, na.rm = TRUE)) / num_bins
+
+# Create the histogram with annotations for the price range
+# ggplot(listings_data, aes(x = price_dollars)) +
+# geom_histogram(fill = "blue", color = "black", bins = num_bins) +
+#  labs(title = "Distribution of Nightly Prices", x = "Price (Dollars)", y = "Frequency") +
+#  theme_minimal() +
+#  stat_bin(binwidth = bin_width, geom = "text", aes(label = ..count..), vjust = -0.5) +
+#  scale_x_continuous(breaks = seq(0, max(listings_data$price_dollars, na.rm = TRUE), bin_width),
+#                     labels = scales::dollar_format(prefix = "$", big.mark = ",")) +
+#  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r, echo=TRUE, fig.width=14, fig.height=10}
+# Create a histogram with 50 bins
+hist_data <- hist(listings_data$price_dollars, 
+                  breaks = 50, 
+                  plot = FALSE)  # Create histogram data without plotting
+
+# Plot the histogram
+plot(hist_data, 
+     main = "Distribution of Price (Dollars)", 
+     xlab = "",
+     ylab = "Frequency", 
+     col = "blue", 
+     border = "black", 
+     xaxt = 'n')  # Suppress x-axis labels initially
+
+# Add custom x-axis labels with price ranges
+bin_midpoints <- hist_data$mids  # Midpoints of bins
+bin_labels <- paste0("[", round(hist_data$breaks[-length(hist_data$breaks)], 2), 
+                     ", ", round(hist_data$breaks[-1], 2), ")")  # Bin range labels
+axis(1, at = bin_midpoints, labels = bin_labels, las = 2, cex.axis = 0.7)  # Custom x-axis
+
+# Add frequency labels at the top of each bin
+text(bin_midpoints, hist_data$counts, labels = hist_data$counts, pos = 3, cex = 0.8)
+
+```
+במחשבה שניה אני לא בטוחה עד כמה זה רלוונטי!
+לא ממש רואים פה משהו...
+
+אפשר אולי להוסיף כגרף רביעי
+
+* bins = 50 is the number of intervals (bins) into which the data range is divided for the histogram. 
+Setting bins = 50 means the entire range of price data is divided into 50 equal intervals.
+
+* X-axis (Price in Dollars): This axis shows the nightly prices of the Airbnb listings. The values range from 0 to over 4000 dollars.
+
+* Y-axis (Frequency): This axis represents the number of listings that fall into each price range (bin).
+
+* Observations - תצפיות: 
+* Skewed Distribution (חלוקה מוטה): The plot shows a highly skewed distribution, with most listings clustered at the lower end of the price scale. This indicates that the majority of listings have relatively low nightly rates.
+
+* Outliers: There are a few listings with significantly higher prices, stretching the distribution far to the right. These could be luxury or unique properties that command higher rates.
+
+* Zero or Near-Zero Prices: A spike near the zero price mark might indicate data entry errors or special pricing strategies like promotional offers or placeholders. (שגיאה בנתונים)
+
+
+* Strategies to Raise Revenue - חיבור לשאלה 4:
+TODO
+
+------------------------------------------------------------------
+
+### Plot 2: Distribution of Review Scores
+```{r}
+#ggplot(listings_data, aes(x = review_scores_rating)) +
+#  geom_histogram(fill = "green", color = "black", bins = 10) +
+#  labs(title = "Distribution of Review Scores", x = "Review Scores Rating", y = "Frequency") +
+#  theme_minimal()
+```
+
+```{r, echo=TRUE, fig.width=14, fig.height=10}
+# Create a histogram with 10 bins
+hist_data <- hist(listings_data$review_scores_rating, 
+                  breaks = 10, 
+                  plot = FALSE)  # Create histogram data without plotting
+
+# Plot the histogram
+plot(hist_data, 
+     main = "Distribution of Review Scores", 
+     xlab = "Review Scores Rating", 
+     ylab = "Frequency", 
+     col = "blue", 
+     border = "black", 
+     xaxt = 'n')  # Suppress x-axis labels initially
+
+# Add custom x-axis labels with price ranges
+bin_midpoints <- hist_data$mids  # Midpoints of bins
+bin_labels <- paste0("[", round(hist_data$breaks[-length(hist_data$breaks)], 2), 
+                     ", ", round(hist_data$breaks[-1], 2), ")")  # Bin range labels
+axis(1, at = bin_midpoints, labels = bin_labels, las = 2, cex.axis = 0.7)  # Custom x-axis
+
+# Add frequency labels at the top of each bin
+text(bin_midpoints, hist_data$counts, labels = hist_data$counts, pos = 3, cex = 0.8)
+```
+
+* Observations - תצפיות: 
+* High Concentration of Top Scores: The histogram shows a significant concentration of listings with review scores around 100, indicating that many listings are highly rated by guests. This suggests a generally positive guest experience across many properties. - ריכוז גבוה של ציונים סביב ה100
+
+* Sparse Low Scores: There are very few listings with low review scores, indicating either high satisfaction or that properties with poor ratings are less common or less frequently reviewed. - מעט ציונים נמוכים
+
+* Gap in Middle Scores: There is a noticeable gap in the mid-range scores (25-75), suggesting that listings tend to either be rated very highly or not at all. This could be due to fewer guests leaving reviews or an issue with the scoring system. - רוב הציונים גבוהים ממש או נמוכים
+
+* התוצאות שקיבלנו קצת מוזרות 
+איך זה שהרוב 100? מה אין ציונים גרועים? אולי זה קשור לערכים חסרים
+
+```{r}
+# Checking the number and percentage of NA (missing) values in the 'review_scores_rating' column
+num_na_reviews <- sum(is.na(listings_data$review_scores_rating))
+total_reviews <- nrow(listings_data)
+percent_na_reviews <- (num_na_reviews / total_reviews) * 100
+num_na_reviews
+percent_na_reviews
+```
+Significant percentage of missing values (22.68%)!
+
+Possible Explanations:
+הסברים אפשריים לתואה שקיבלנו בגרף:
+1. Bias in Review Submissions:
+- Happy Guests Are More Likely to Review: Often, guests who have a very positive experience are more motivated to leave reviews, especially if they feel strongly about their experience. This can lead to a skew in the data where high scores dominate.
+- Cultural or Platform Bias: In some cultures or platforms, there might be a tendency to avoid leaving negative feedback unless the experience was extremely poor. This cultural bias can result in predominantly high ratings.
+
+2. Selection Bias:
+- Listing Curation: Airbnb hosts might selectively encourage satisfied guests to leave reviews, while not prompting those who might leave lower scores. 
+נעודד רק את אלו שנהנו להשאיר ציון
+- ncentives for Positive Reviews: Sometimes, hosts offer incentives for positive reviews, intentionally or not, which can skew the distribution towards higher scores.
+תמריצים להשארת ציון גבוה
+
+3. Missing Data Impact:
+- Non-Reviewed Stays: The missing review data (22.68%) could represent stays that were either not reviewed by guests or the reviews were withheld. These missing reviews could potentially include more negative experiences.
+- Systematic Omission: If the missing data disproportionately represents lower scores, this would skew the visible data towards higher scores. It’s essential to understand why these values are missing—whether due to guest inaction, system errors, or intentional omission.
+האם הערכים החסרים מעידים על ציונים נמוכים?
+אולי זה לא מושכר ולכן יש ערכים חסרים ואין לזה ציון!
+
+* Strategies to Raise Revenue - חיבור לשאלה 4:
+רוב הציונים אכן גבוהים, יכול להראות קצת חשוד כי יכול להיות שיש פה רמאות כלשהי(גם אם לא במכוון)
+על כן נעדיף להסתכל על זה בעין חשדנית
+נרצה לבדוק יותר מאוחר את הקשר למחיר ואת הקשר להזמנות שבוצעו בפועל.
+
+
+------------------------------------------------------------------
+### Plot 3: Distribution of the number of beds
+```{r}
+ggplot(listings_data, aes(x = factor(beds))) +
+  geom_bar(fill = "purple", color = "black") +
+  labs(title = "Distribution of Number of Beds in Listings", x = "Number of Beds", y = "Frequency") +
+  theme_minimal()
+```
+
+למה בחרנו בזה?:
+- Variable Choice: Number of Beds - The number of beds in a listing is crucial as it determines the accommodation capacity, influencing both pricing and the target market. Listings with more beds can attract larger groups, such as families or group travelers, potentially leading to higher per-night revenue. This variable also allows targeting different market segments, which can significantly affect booking rates and pricing strategies.
+מדובר בפרמטר קריטי שקובע את קיבולת האירוח ועל מס' הלנים.
+
+ניתן לראות שרוב הדיור שמושכר הוא עם מיטה אחת-2, זה יכול להיות מעט בעייתי בעיקר אם רוצים להגדיל הכנסות.
+דיור בעל מספר גדול יותר של מיטות יהיה מושכר בעלות יותר גדולה מאחר ויש קשר בין גודל הנכס למספר המיות בו, 
+הגיוני שנכנס גדול יותר יכיל יותר מיטות ולכן יהיה מושכר ביותר כסף.
+הייתי ממליצה להציע יותר נכסים בעלי מספר גדול יותר של מיטות (זה גם מכניס יותר כסף וגם מגדיל את מגוון ההיצע שיש לאירביאנדבי להציע)
+
+
+------------------------------------------------------------------
+### Plot 4: Distribution of Host Response Times
+
+```{r, echo=TRUE, fig.width=14, fig.height=8}
+# Count the occurrences of each response category
+response_counts <- table(listings_data$host_response_time)
+
+# Set up the plotting area with more space for axis labels
+par(mar = c(7, 4, 4, 2) + 0.1)  # Adjust bottom margin to provide more space
+
+# Plot the bar chart with adjusted y-axis limit
+bp <- barplot(response_counts,
+              main = "Distribution of Host Response Times",
+              ylab = "Frequency",
+              col = "lightblue",
+              las = 1,  # Make the labels horizontal
+              cex.names = 1.2,  # Increase the size of the axis labels
+              ylim = c(0, 1500))  # Set y-axis limit up to 1400
+
+# Add frequency labels above each bar
+text(x = bp, y = response_counts, labels = response_counts, pos = 3, cex = 1.0, col = "black")
+
+# Reset margins to default
+par(mar = c(5, 4, 4, 2) + 0.1)
+
+```
+לא אומר הרבה....
+זה תוצאות טובות שהרוב עונים מהר
+כנראה ימחק!
+
+------------------------------------------------------------------
+### Plot 5: Distribution of property Type
+```{r, echo=TRUE, fig.width=14, fig.height=8}
+# Count the occurrences of each response category
+response_counts <- table(listings_data$property_type)
+
+# Set up the plotting area with more space for axis labels
+par(mar = c(7, 4, 4, 2) + 0.1)  # Adjust bottom margin to provide more space
+
+# Plot the bar chart with adjusted y-axis limit
+bp <- barplot(response_counts,
+              main = "Distribution of Host Response Times",
+              ylab = "Frequency",
+              col = "lightblue",
+              las = 1,  # Make the labels horizontal
+              cex.names = 1.2,  # Increase the size of the axis labels
+              ylim = c(0, 3000))  # Set y-axis limit up to 1400
+
+# Add frequency labels above each bar
+text(x = bp, y = response_counts, labels = response_counts, pos = 3, cex = 1.0, col = "black")
+
+# Reset margins to default
+par(mar = c(5, 4, 4, 2) + 0.1)
+
+```
+
+חסר מגוון!
+אולי הגדלת המגוון עשויה להביא סוג נוסף של לקוחות שמעוניין להשכיר דיור אחר ולא רק דירות ובכך להגדיל את הרווחים.
+
+The graph shows a predominance of apartments (2,612 listings) among available rental properties, with other types like houses (562 listings) being far less common. This indicates a lack of variety in accommodations. To attract a broader customer base, the platform should encourage more listings of diverse property types, such as boats, camper/RVs, and villas. Increasing variety can appeal to niche markets and potentially boost bookings. Diversifying property offerings could lead to increased profits by catering to different traveler preferences.
+
+* Strategies to Raise Revenue - חיבור לשאלה 4:
+נמליץ באופן כללי להציע מגוון רחב יותר של נכסים על מנת להגיע ליותר סוגי אנשים ולעלות על צרכיהם.
+
+------------------------------------------------------------------
+
+## Multi-Variable Analysis
+### Plot 1: Average Review Scores by Neighbourhood with Listing Count
+
+```{r, echo=TRUE, fig.width=14, fig.height=8}
+
+# Filter out rows with missing review_scores_location or num_listings
+neighborhood_data <- listings_data %>%
+  group_by(neighbourhood) %>%
+  summarise(
+    avg_review_score = mean(review_scores_location, na.rm = TRUE),
+    num_listings = n()
+  ) %>%
+  filter(!is.na(avg_review_score) & !is.na(num_listings))
+
+# Plot 1: Average Review Scores by Neighbourhood with Listing Count
+ggplot(neighborhood_data, aes(x = reorder(neighbourhood, -avg_review_score), y = avg_review_score, size = num_listings)) +
+  geom_point(alpha = 0.6, color = "blue") +
+  scale_size_area(max_size = 20) +
+  labs(title = "Average Review Scores by Neighbourhood with Listing Count",
+       x = "Neighbourhood",
+       y = "Average Review Score (Location)",
+       size = "Number of Listings") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+The bubble plot shows the relationship between average review scores for location and the number of listings across different neighborhoods. Notably, neighborhoods like Brookline and Chestnut Hill have high average review scores, suggesting they are well-regarded by guests for their location. However, these areas also have fewer listings, indicating potential for growth. On the other hand, neighborhoods like Allston-Brighton and Back Bay have a high number of listings but comparatively lower average review scores, suggesting these areas are popular but might benefit from improvements in location-related amenities.
+
+Recommendation: To maximize profitability and guest satisfaction, consider investing in increasing the number of listings in high-scoring neighborhoods, as these areas are already preferred by guests for their location. Additionally, improving amenities and services in lower-scoring but popular neighborhoods could enhance guest experiences, potentially leading to higher ratings and increased bookings. This balanced approach could optimize both guest satisfaction and revenue growth.
+
+אזורים שנחשבים לטובים עדיף להשכיר בהם יותר!
+
+------------------------------------------------------------------
+
+### Plot 2: Relationship Between Review Scores and Prices by Number of Beds
+
+```{r, echo=TRUE, fig.width=14, fig.height=8}
+# Filter out missing values
+#data_filtered <- listings_data %>%
+#  filter(!is.na(price_dollars) & !is.na(review_scores_rating) & !is.na(beds))
+
+# Scatter Plot with Facets by Number of Beds
+#ggplot(data_filtered, aes(x = review_scores_rating, y = price_dollars)) +
+#  geom_point(alpha = 0.6, color = "blue") +
+#  facet_wrap(~ beds, scales = "free_y", ncol = 3) +
+#  labs(title = "Review Scores vs Price by Number of Beds",
+#       x = "Review Scores Rating",
+#       y = "Price (Dollars)") +
+#  theme_minimal() +
+#  theme(strip.text = element_text(size = 10),
+#        plot.title = element_text(hjust = 0.5))
+```
+
+הסבר:
+- Review Scores on the X-axis: Displays how guest ratings relate to pricing.
+- Price on the Y-axis: Shows the variation in prices for listings with different review scores.
+- Facets for Number of Beds: Each facet represents a different bed category, helping to see patterns or trends specific to each category.
+
+הגרף הזה לא ממש עוזר לי להבין משהו - כנראה ימחק! 
+
+
+------------------------------------------------------------------
+
+### Plot 3: Correlation of Various Review Aspects with Overall Review Score
+
+```{r}
+# Calculate correlation coefficients
+correlations <- listings_data %>%
+  select(review_scores_rating, review_scores_communication, review_scores_checkin, review_scores_cleanliness, review_scores_accuracy) %>%
+  summarise(across(starts_with("review_scores"), ~cor(review_scores_rating, ., use = "complete.obs"))) %>%
+  pivot_longer(cols = -review_scores_rating, names_to = "Aspect", values_to = "Correlation")
+
+# Plot the correlations
+ggplot(correlations, aes(x = reorder(Aspect, Correlation), y = Correlation, fill = Aspect)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Correlation of Various Review Aspects with Overall Review Score Rating", 
+       x = "Review Aspect", 
+       y = "Correlation Coefficient") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Blues")
+```
+תובנות:
+The bar plot above illustrates the correlation between various review aspects (cleanliness, accuracy, communication, and check-in) and the overall review score rating for Airbnb listings. 
+The higher the correlation coefficient, the stronger the relationship between the aspect and the overall rating.
+In this case, "cleanliness" has the highest correlation with the overall review score, followed by "accuracy," "communication," and "check-in." 
+This suggests that guests value cleanliness the most when rating their stay, indicating that hosts should prioritize maintaining a clean environment.
+Additionally, focusing on accuracy in listings, effective communication, and a smooth check-in process can also enhance guest satisfaction and lead to higher ratings.
+Therefore, hosts are recommended to pay particular attention to cleanliness, as it significantly influences guest perceptions and overall satisfaction.
+
+ניקיון משפיע הכי הרבה כדאי למארח לשים לב לזה, זה יעלה את הציון שלו ועשוי להביא לו יותר לקוחות ובכך להעלות רווחים.
+
+------------------------------------------------------------------
+
+### Graph 4: Average Price by Review Score Bands and Number of Beds
+
+```{r}
+
+# Define bins for review scores
+bins <- cut(listings_data$review_scores_rating, breaks = seq(0, 100, by = 20), include.lowest = TRUE)
+
+# Add bins to the data
+listings_data$score_bins <- bins
+
+# Calculate average price for each bin and number of beds
+average_price_by_bin_beds <- aggregate(price_dollars ~ score_bins + beds, data = listings_data, FUN = mean, na.rm = TRUE)
+
+# Plot the average price by review score bins and number of beds
+ggplot(average_price_by_bin_beds, aes(x = score_bins, y = price_dollars, fill = as.factor(beds))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Average Price by Review Score Bands and Number of Beds", x = "Review Score Bands", y = "Average Price (Dollars)", fill = "Number of Beds") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+הסבר - מה רואים:
+This graph displays the average price of Airbnb listings across different review score bands, segmented by the number of beds.
+The x-axis represents review score bands, while the y-axis shows the average price in dollars. 
+Different colors indicate the number of beds in each listing.
+הצגנו את הציונים השונים תוך קיבוץ לקבוצות ואת המחיר שנדרש עבור כל קבוצת ציון, כאשר חילקנו למספר חדרים - זאת על מנת לנקות את השפעת גודל הנכס.
+
+תובנות:
+From the graph, it is evident that the relationship between review scores and price varies by the number of beds. 
+Listings with one bed show less variation in price across different review score bands, suggesting that review scores may not significantly impact pricing for these smaller units. 
+In contrast, listings with more beds, particularly those in higher review score bands (60-100), generally command higher prices. 
+This trend implies that larger listings with better reviews can justify higher prices.
+
+המלצה:
+Property owners, especially those with multiple beds, should focus on improving their review scores to enhance their value perception. 
+By investing in the quality and amenities of their properties, they can achieve higher ratings, which in turn can justify higher nightly rates and increase overall profitability.
+
+נמליץ לבעלי הנכסים עם ציונים גבוהים להעלות את המחיר לנכס שלהם - הם יכולים לעשות זאת כי השקעה שווה כסף.
+
+
+------------------------------------------------------------------
+
+
+# Part 2 - Business Metrics
+
+## 1. Growth
+
+הגדרת המטריקה:
+TODO
+
+מה היא תופסת ומה מפספסת:
+TODO
+
+מדד:
+```{r}
+#TODO
+```
+
+דעה:
+TODO
+
+------------------------------------------------------------------
+
+## 2. Growth by Neighborhood
+
+הגדרת המטריקה:
+TODO
+
+מה היא תופסת ומה מפספסת:
+TODO
+
+מדד:
+```{r}
+#TODO
+```
+
+דעה:
+TODO
+
+
+------------------------------------------------------------------
+
+
+## 3. Price Change
+
+הגדרת המטריקה:
+TODO
+
+מה היא תופסת ומה מפספסת:
+TODO
+
+מדד:
+```{r}
+#TODO
+```
+
+דעה:
+TODO
+
+
+------------------------------------------------------------------
+
+
+
+
+# Part 2 - Outliers
+```{r}
+TODO
+```
+
