@@ -37,7 +37,6 @@ summary(listings_data)
 skim(listings_data)
 ```
 - no missing values for the price_dollars
-- no missing values for beds
 
 - המחיר הוא מחיר קטלוג כלומר המחיר שיש בטבלה הזו זה המחיר שבכל הנכס ראה לנכון לרשום לראושנה.
 ------------------------------------------------------------------
@@ -249,23 +248,23 @@ par(mar = c(5, 4, 4, 2) + 0.1)
 ------------------------------------------------------------------
 ### Plot 5: Distribution of property Type
 ```{r, echo=TRUE, fig.width=14, fig.height=8}
-# Count the occurrences of each response category
+# Count the occurrences of each property type
 response_counts <- table(listings_data$property_type)
 
 # Set up the plotting area with more space for axis labels
-par(mar = c(7, 4, 4, 2) + 0.1)  # Adjust bottom margin to provide more space
+par(mar = c(12, 4, 4, 2) + 0.1)  # Increase bottom margin for rotated labels
 
 # Plot the bar chart with adjusted y-axis limit
 bp <- barplot(response_counts,
-              main = "Distribution of Host Response Times",
+              main = "Distribution of Property Types",
               ylab = "Frequency",
               col = "lightblue",
-              las = 1,  # Make the labels horizontal
-              cex.names = 1.2,  # Increase the size of the axis labels
-              ylim = c(0, 3000))  # Set y-axis limit up to 1400
+              las = 2,  # Rotate the labels to be perpendicular to the axis
+              cex.names = 0.8,  # Adjust size of axis labels
+              ylim = c(0, 3000))  # Set y-axis limit
 
 # Add frequency labels above each bar
-text(x = bp, y = response_counts, labels = response_counts, pos = 3, cex = 1.0, col = "black")
+text(x = bp, y = response_counts, labels = response_counts, pos = 3, cex = 0.8, col = "black")
 
 # Reset margins to default
 par(mar = c(5, 4, 4, 2) + 0.1)
@@ -426,6 +425,21 @@ By investing in the quality and amenities of their properties, they can achieve 
 
 
 # Part 2 - Business Metrics
+
+```{r}
+# Rename price_dollars to org_price in listings_data
+listings_data_copy <- listings_data %>% rename(org_price = price_dollars)
+
+# Merge the dataframes on listing_id
+merged_data <- merge(
+  calendar_data,
+  listings_data_copy,
+  by.x = "listing_id",
+  by.y = "id"
+)
+```
+
+
 
 ## 1. Growth
 
