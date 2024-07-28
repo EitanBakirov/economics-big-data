@@ -446,6 +446,55 @@ merged_data <- merge(
 הגדרת המטריקה:
 TODO
 
+* RevPAN (per listing) - Revenue per available Night
+Metric that measures the average revenue generated per night that a listing is available for booking. It combines the impact of both the listing's pricing (average daily rate) and its occupancy rate, offering a comprehensive view of how effectively a listing is utilizing its availability to generate income.
+
+Also read here:
+- https://lodgable.com/airbnb-kpis/
+- https://hostify.com/blog/key-airbnb-performance-metrics-hosts-should-track
+- https://www.airdna.co/blog/vacation-rental-metrics-revpar
+
+* RevPAN per listing helps to assess the revenue efficiency of individual listings by indicating how much revenue each available night generates on average. This metric is useful for understanding the balance between setting the right price and achieving high occupancy, allowing property managers and hosts to optimize their pricing and availability strategies to maximize income.
+
+* The formula:
+
+  1. RevPAN = ADR × Occupancy Rate
+
+  Where:
+  - ADR (Average Daily Rate) = Total listing Revenue / # Nights Booked
+  - Occupancy Rate = # Nights Booked / # All Nights per listing
+  
+  ** # Nights Booked = # nights where the listing was rented, 
+  where available_category = 1
+  
+  ** Average Daily Rate (ADR): This is how much a host charges per day for their rental,
+  reflecting the pricing strategy of the property.
+  
+  ** Occupancy Rates: This metric shows the percentage of available rooms or rentals occupied at a given time. 
+  It helps property managers understand the demand and attractiveness of their property.
+  
+  or
+  
+  2. RevPAN = Total listing Revenue / # All Nights per listing  
+
+* רוב הנכסים עם מספר זהה יחסית של לילות (המכנה) ->חשוב להראות את זה
+
+* אפשר לחשוב על מדד זה כעל פוטנציאל רווח עבור כל נכס:
+  - איך נתרגם מטריקה זו לצמיחה?
+  עבור הנכסים עם פוטנציאל נמוך נצטרך לחשוב או לבנות אסטרטגיה לצורך העלאת הרווח.
+  
+  1. עבור תפוסה נמוכה - נוריד מחיר 
+    נרצה להעלות את פוטנציאל הנכס, 
+    הרי התפוסה שלו נמוכה אז כנראה בעל הנכס מבקש עבורו מחיר גבוה מידיי. 
+    נמליץ לו להוריד מעט את המחיר על מנת למשוך יותר לקוחות.
+    
+  2. עבור תפוסה מלאה - נעלה מחיר 
+    נרצה להעלות את פוטנציאל הנכס,
+    הרי התפוסה מלאה כלומר אנשים אוהבים את הנכס אבל אין פוטנציאל הרווח שלו לא ממומש.
+    נמליץ לבעל הנכס להעלות את המחיר וכך ירוויח יותר.
+    
+* חשוב- כאן נעשה את המדד על טבלת ליסטינג, אין צורך בשילוב. כל נכס מקבל ציון מהמדד.
+
 מה היא תופסת ומה מפספסת:
 TODO
 
@@ -463,6 +512,38 @@ TODO
 
 הגדרת המטריקה:
 TODO
+
+* Refers to analyzing and measuring the performance and development of Airbnb properties in different neighborhoods over time.
+
+* Neighborhood RevPAN -  Measure RevPAN specifically for each neighborhood to understand which areas generate the most revenue per available room.
+
+* The formula:
+
+  Neighborhood RevPAN = Neighborhood ADR × Neighborhood Occupancy Rate
+  
+  Where:
+
+  Neighborhood ADR (Average Daily Rate) = 
+  Total listing Revenue per Neighborhood / 
+  # Nights Booked in Neighborhood
+   
+  Neighborhood Occupancy Rate = 
+  # Nights Booked in Neighborhood /
+  # All Nights per Neighborhood
+ 
+  Or
+  
+  Neighborhood RevPAN = Total Listing Revenue per Neighborhood / # All Nights per Neighborhood
+
+* כאן נרצה לעשות מרג בין הטבלאות ולהסתכל על הנכסים של כל שכונה.
+  נחשב את הרווח של כל שכונה ונחלק במספר הלילות הרלוונטיות בלבד (כאלה שיש עבורן מחיר.)
+  כל שכונה תקבל ציון.
+  
+* כאן נסתכל על פוטנציאל הרווח של השכונות.
+
+* אפשר להסתכל על אחוז הלילות בהן הנכס הוצע להשכרה:
+  מספר התאריכים שמופיעים בטבלה / ההפרש בין התאריך הכי גבוה לתאריך הכי נכון
+  (נבדוק אם זה אומר לנו משהו?)
 
 מה היא תופסת ומה מפספסת:
 TODO
@@ -484,6 +565,34 @@ TODO
 הגדרת המטריקה:
 TODO
 
+* הנחה: מה ששולם בפועל עבור כל ליסטיל זה כמות הכסף שבעל הנכס ביקש לילה בפועל
+
+* חישוב שונות במחיר על ידי הפרשי דלתות
+
+* Refers to analyzing the variation between the original listed price of Airbnb properties (org_price) and the actual prices paid (price_dollars) over time. 
+
+* Average Price Deviation - Measures the average difference between the original listed price and the actual price paid for all bookings.
+
+* The formula:
+
+  Average Price Deviation = sum(price_dollars - org_price) / # of booking
+  
+* Average Price Deviation provides valuable insights into the effectiveness of pricing strategies and the dynamics of market demand.  
+  
+* כאן נוכל להבין האם בעל הנכס הצליח להשכיר יותר ממה שחשב בהתחלה או פחות:
+
+ - Positive Deviation: If price_dollars frequently exceeds org_price, it suggests strong demand, allowing for higher prices than initially expected. This could indicate that the listing is undervalued, presenting an opportunity to increase the original listing price.
+ 
+ - Negative Deviation: Conversely, if price_dollars is often lower than org_price, it may suggest overpricing or a need to discount to attract bookings, indicating a potential issue with demand at the original price point.
+ 
+* Market Sensitivity and Flexibility:
+The metric reveals how sensitive the market is to price changes and how flexible the pricing strategy needs to be. Regular adjustments may reflect seasonal trends, special events, or competitive pressures.
+
+* Revenue Optimization:
+Understanding the average deviation helps in optimizing revenue management strategies. For instance, consistently lower actual prices might indicate a need for dynamic pricing strategies or better market analysis to set more competitive prices initially.
+
+
+
 מה היא תופסת ומה מפספסת:
 TODO
 
@@ -501,7 +610,7 @@ TODO
 
 
 
-# Part 2 - Outliers
+# Part 3 - Outliers
 ```{r}
 TODO
 ```
