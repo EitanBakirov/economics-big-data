@@ -426,10 +426,16 @@ By investing in the quality and amenities of their properties, they can achieve 
 
 # Part 2 - Business Metrics
 
+## Merge the CSVs
 ```{r}
 # Rename price_dollars to org_price in listings_data
 listings_data_copy <- listings_data %>% rename(org_price = price_dollars)
 
+# Create copy
+calendar_data_copy <- calendar_data
+```
+
+```{r}
 # Merge the dataframes on listing_id
 merged_data <- merge(
   calendar_data,
@@ -439,33 +445,44 @@ merged_data <- merge(
 )
 ```
 
-
+*** available_category חידוד בנוגע למשתנה :
+- available_category = 0: הנכס הוצע על ידי המארח אבל לא הוזמן ע"י לקוח
+- available_category = 1: הנכס הוצע על ידי המארח והוזמן ע"י לקוח
+- תאריך שלא הופיע זה תאריך שלא הוצע ע" המארח
 
 ## 1. Growth
 
 הגדרת המטריקה:
-TODO
+מטריקה המראה את ההכנסה ההמוצעת ללילה (תאריך) זמין עך ידי המארח עבור כל נכס.
+הוא מספק תובנות לגבי האפקטיביות של אסטרטגיית התמחור של הנכס וביצועי ההכנסות הכוללים שלו.
 
-* RevPAN (per listing) - Revenue per available Night
-Metric that measures the average revenue generated per night that a listing is available for booking. It combines the impact of both the listing's pricing (average daily rate) and its occupancy rate, offering a comprehensive view of how effectively a listing is utilizing its availability to generate income.
+* RevPAN measures the average revenue generated per night that a listing is available for booking, calculated monthly. It combines the effects of pricing strategies (Average Daily Rate, ADR) and booking success (Occupancy Rate), offering a comprehensive view of how effectively a listing utilizes its availability to generate income.
+
+* RevPAN per listing assesses the revenue efficiency by indicating the revenue generated per available night on average. This metric is crucial for understanding the balance between setting competitive prices and achieving high occupancy rates, enabling property managers and hosts to optimize their strategies to maximize income.
 
 Also read here:
+- https://airbtics.com/revpan/ -> הכי מדוייק לנו
+- https://help.usewheelhouse.com/en/articles/1817194-understanding-the-revenue-per-available-night-chart
+- https://www.lake.com/help/glossary/revenue-per-available-night/
+- https://roompricegenie.com/revpar-what-is-revpar/
 - https://lodgable.com/airbnb-kpis/
 - https://hostify.com/blog/key-airbnb-performance-metrics-hosts-should-track
 - https://www.airdna.co/blog/vacation-rental-metrics-revpar
 
-* RevPAN per listing helps to assess the revenue efficiency of individual listings by indicating how much revenue each available night generates on average. This metric is useful for understanding the balance between setting the right price and achieving high occupancy, allowing property managers and hosts to optimize their pricing and availability strategies to maximize income.
-
 * The formula:
 
-  1. RevPAN = ADR × Occupancy Rate
+  1. RevPAN = ADR × Occupancy Rate per month
 
   Where:
   - ADR (Average Daily Rate) = Total listing Revenue / # Nights Booked
   - Occupancy Rate = # Nights Booked / # All Nights per listing
   
-  ** # Nights Booked = # nights where the listing was rented, 
+  ** # Nights Booked = # nights where the listing was rented out, 
   where available_category = 1
+  
+  ** Total Listing Revenue = sum of price_dollars for a listing where available_category = 1 (indicating the room was available and booked).
+  
+  ** # All Nights per Listing = both booked and unbooked nights within the month.
   
   ** Average Daily Rate (ADR): This is how much a host charges per day for their rental,
   reflecting the pricing strategy of the property.
@@ -476,6 +493,8 @@ Also read here:
   or
   
   2. RevPAN = Total listing Revenue / # All Nights per listing  
+  
+  This formula directly calculates RevPAN by dividing the total revenue by the total number of available nights for the listing in a given month.
 
 * רוב הנכסים עם מספר זהה יחסית של לילות (המכנה) ->חשוב להראות את זה
 
@@ -493,15 +512,96 @@ Also read here:
     הרי התפוסה מלאה כלומר אנשים אוהבים את הנכס אבל אין פוטנציאל הרווח שלו לא ממומש.
     נמליץ לבעל הנכס להעלות את המחיר וכך ירוויח יותר.
     
-* חשוב- כאן נעשה את המדד על טבלת ליסטינג, אין צורך בשילוב. כל נכס מקבל ציון מהמדד.
+*  חשוב- כאן נעשה את המדד עבור כל חודש של ליסטינג, כל נכס מקבל ציון מהמדד עבור כל חודש.
+
 
 מה היא תופסת ומה מפספסת:
-TODO
+
+* Includes:
+  1. 
+  
+  
+  
 
 מדד:
+
+### 1. RevPAN Using ADR and Occupancy Rate
 ```{r}
-#TODO
+# Ensure data is properly formatted
+merged_data$price_dollars <- as.numeric(gsub("[\\$,]", "", merged_data$price_dollars))
+merged_data$date <- as.Date(merged_data$date, format="%m/%d/%Y")
+
+# Extract year-month for grouping
+merged_data <- merged_data %>%
+  mutate(year_month = format(date, "%Y-%m"))
+
 ```
+
+```{r}
+# Calculate RevPAN per listing per month
+revpan_data <- merged_data %>%
+  filter(!is.na(price_dollars) & available_category == 1) %>%
+  group_by(listing_id, year_month) %>%
+  summarise(
+    total_revenue = sum(price_dollars, na.rm = TRUE),
+    nights_booked = n(),
+    total_nights = n_distinct(date),
+    ADR = total_revenue / nights_booked,
+    occupancy_rate = nights_booked / total_nights,
+    RevPAN = total_revenue / total_nights,
+    .groups = "drop"
+  )
+```
+
+
+```{r}
+# Display the results
+revpan_data
+```
+
+```{r}
+# Sample 5 random listings
+set.seed(123)  # For reproducibility
+random_listings <- sample(unique(revpan_data$listing_id), 5)
+random_listings
+```
+
+
+```{r}
+# Filter data for these listings
+plot_data <- revpan_data %>% filter(listing_id %in% random_listings)
+
+# Plot
+ggplot(plot_data, aes(x = year_month, y = RevPAN, group = listing_id, color = factor(listing_id))) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "RevPAN Over Time for Random Listings",
+       x = "Month",
+       y = "RevPAN (Revenue per Available Night)",
+       color = "Listing ID") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+# Summarize RevPAN data by month
+revpan_summary <- revpan_data %>%
+  group_by(year_month) %>%
+  summarise(avg_revpan = mean(RevPAN, na.rm = TRUE))
+
+# Plot RevPAN over time
+ggplot(revpan_summary, aes(x = year_month, y = avg_revpan)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 2) +
+  labs(title = "Monthly RevPAN Trend",
+       x = "Month",
+       y = "Average RevPAN (Revenue per Available Night)",
+       caption = "Source: Airbnb Data") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+- This is a visual representation of the RevPAN (Revenue per Available Night) over time, averaged across all listings.
+- This visualization helps in identifying trends, seasonal patterns, and potential impacts of external factors on revenue efficiency.
+
 
 דעה:
 TODO
@@ -611,7 +711,28 @@ TODO
 
 
 # Part 3 - Outliers
+
+The first part is to identify a period of time in which the behavior is abnormal.
+
+מה שאפשר לעשות זה גרף עם אחוזי תפוסה לכל יום:
+ציר האיקס - ימים
+ציר הווי - אחוזי תפוסה פר תאריך
+
+לאחר מכן, נוכל להבין אם יש טווחי זמן שהם מוזרים: אחוזי תפוסה גבוהים או נמוכים מהרגיל ולפי זה נדע להתמקד על התקופת זמן ולהבין מה קורה שם, אולי זאת תקופת חגים.
+
 ```{r}
-TODO
+#TODO
 ```
 
+-----------------------------------
+
+
+The second part is clearing outliers for:
+1. Beds
+2. Price
+
+נזכור שקודם נרצה לטפל בערכים החסרים!
+
+```{r}
+#TODO
+```
