@@ -430,6 +430,9 @@ By investing in the quality and amenities of their properties, they can achieve 
 ```{r}
 # Rename price_dollars to org_price in listings_data
 listings_data_copy <- listings_data %>% rename(org_price = price_dollars)
+# Ensure the host_since is in date format and extract year-month
+listings_data_copy$host_since <- as.Date(listings_data_copy$host_since, format="%m/%d/%Y")
+listings_data_copy$host_since_month <- format(listings_data_copy$host_since, "%Y-%m")
 
 # Create copy
 calendar_data_copy <- calendar_data
@@ -470,7 +473,32 @@ merged_data
 ## 1. Growth
 
 הגדרת המטריקה:
-TODO
+
+* Growth in New Airbnb Listings can be a crucial metric for understanding the expansion and market penetration of your Airbnb business. 
+This metric tracks the increase in the number of new properties added to the platform over time, reflecting business growth and the attractiveness of the platform to hosts.
+
+* The metric: Growth in New Listings
+
+* Definition: Measures the rate at which new properties are being added to the Airbnb platform, indicating business expansion and market share growth.
+
+* Formula:
+  Growth in New Listings = ((Number of New Listings in this month - Number of New Listings last month) / Number of New Listings last month ) X 100
+
+* Benefits:
+  - Market Expansion: Shows how effectively the company is expanding its property portfolio, which is essential for increasing market presence and offering more options to travelers.
+  - Host Acquisition Success: Indicates the success of marketing and recruitment efforts in attracting new hosts to the platform.
+  - Competitive Advantage: Helps to assess the competitive position in the market; a high growth rate in listings can indicate a strong brand and attractive value proposition for hosts. 
+
+* Business Conclusions and Recommendations
+  - Identify Market Trends: Track where new listings are being added geographically to understand emerging popular areas. This can help tailor marketing strategies to target potential new hosts in these regions.
+
+  - Assess Platform Attractiveness: A high rate of new listings growth suggests that the platform is appealing to hosts. Maintain and enhance this attractiveness through user-friendly interfaces, competitive fees, and support services.
+
+  - Evaluate and Optimize Host Acquisition Strategies: If growth in new listings is slowing, it may indicate the need to re-evaluate host acquisition strategies. This could involve improving host incentives, marketing campaigns, or simplifying the listing process.
+
+  - Resource Allocation: Use insights from new listings growth to allocate resources effectively, such as enhancing customer support in areas with rapid listing growth or increasing marketing efforts in regions with potential for new hosts.
+
+  - Monitor Competition: Understand how your growth in new listings compares with competitors to gauge market positioning. A slower growth rate relative to competitors may necessitate strategic adjustments.
 
 
 מה היא תופסת ומה מפספסת:
@@ -478,8 +506,69 @@ TODO
 
 מדד:
 ```{r}
-#TODO
+# Calculate the number of new listings per month
+new_listings_per_month <- listings_data_copy %>%
+  group_by(host_since_month) %>%
+  summarise(new_listings = n())
+
+# Calculate growth in new listings month-over-month
+new_listings_per_month <- new_listings_per_month %>%
+  mutate(
+    growth_rate = (new_listings - lag(new_listings)) / lag(new_listings) * 100
+  )
 ```
+
+```{r}
+new_listings_per_month 
+```
+
+```{r}
+# Convert host_since_month back to Date for plotting
+new_listings_per_month$host_since_month <- as.Date(paste0(new_listings_per_month$host_since_month, "-01"))
+```
+
+
+```{r echo=TRUE, fig.width=18, fig.height=12}
+ggplot(new_listings_per_month, aes(x = host_since_month, y = new_listings)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 2) +
+  labs(title = "Number of New Listings per Month",
+       x = "Month",
+       y = "Number of New Listings") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r echo=TRUE, fig.width=18, fig.height=12}
+# Plotting the growth rate in new listings
+ggplot(new_listings_per_month, aes(x = host_since_month, y = growth_rate)) +
+  geom_line(color = "green", size = 1) +
+  geom_point(color = "green", size = 2) +
+  labs(title = "Growth Rate in New Listings per Month",
+       x = "Month",
+       y = "Growth Rate (%)") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The plots illustrate the growth in new Airbnb listings over time, providing insights into the company's expansion and market dynamics:
+
+* Number of New Listings per Month
+- Trend Analysis: The first plot shows the absolute number of new listings added each month. There's a noticeable increase in new listings over time, indicating an expanding portfolio of properties. This growth suggests a positive trend in the company’s ability to attract new hosts, likely contributing to increased market share and revenue potential.
+- Seasonal Fluctuations: The plot also reveals seasonal or periodic spikes in new listings, which could correlate with strategic marketing campaigns, seasonal travel patterns, or specific events that drive hosts to list their properties.
+
+* Growth Rate in New Listings per Month
+- Growth Rate Insights: The second plot depicts the growth rate of new listings, highlighting the percentage change month-over-month. The sharp spike early on could indicate a significant initial growth phase or response to an early market strategy.
+- Stabilization: Following the initial spike, the growth rate stabilizes, which is common as markets mature. However, consistent positive growth rates suggest ongoing expansion and sustained interest from new hosts.
+- Market Penetration: The fluctuations in growth rate also suggest varying levels of market penetration over time. Periods with higher growth rates could indicate successful outreach or market conditions favorable for new listings, while lower rates may suggest market saturation or external factors affecting growth.
+
+* Overall Interpretation
+- Business Expansion: The increase in both the number and growth rate of new listings over time indicates a robust expansion of Airbnb's property inventory. This expansion is crucial for meeting increasing demand and offering a diverse range of accommodations to guests.
+- Strategic Adjustments: The observed patterns, especially the initial surge and subsequent stabilization, suggest that Airbnb may need to continuously adapt its strategies to maintain momentum. This could involve enhancing host engagement, optimizing listing quality, or expanding into new markets.
+- Future Prospects: Sustained growth in new listings, even if at a slower rate, signals a healthy trajectory for the company. Ensuring that these new listings are high-quality and well-located will be essential for maintaining high occupancy rates and maximizing revenue.
+
+These insights can help inform strategic decisions, such as where to focus marketing efforts, how to support hosts, and which markets may offer the best opportunities for further expansion.
 
 דעה:
 TODO
@@ -539,8 +628,10 @@ neighborhood_revpan_data <- merged_data %>%
   group_by(neighbourhood, year_month) %>%
   summarise(
     total_revenue = sum(price_dollars[available_category == 1], na.rm = TRUE), # Sum of all revenues in the neighborhood for booked nights
-    total_available_nights = n(), # Count of all nights in the month for all listings
-    RevPAN = total_revenue / total_available_nights, # Monthly RevPAN calculation
+    nights_booked = sum(available_category == 1),  # Count of booked nights
+    total_nights = n(), # Count of all nights in the month for all listings
+    RevPAN = total_revenue / total_nights, # Monthly RevPAN calculation
+    occupancy_rate = nights_booked / total_nights, # Availability rate calculation
     .groups = "drop"
   )
 ```
@@ -549,20 +640,257 @@ neighborhood_revpan_data <- merged_data %>%
 neighborhood_revpan_data
 ```
 
-```{r, echo=TRUE, fig.width=14, fig.height=10}
+```{r}
+label_data <- neighborhood_revpan_data %>%
+  group_by(neighbourhood) %>%
+  filter(year_month == max(year_month)) %>%
+  ungroup()
+```
+
+
+```{r, echo=TRUE, fig.width=18, fig.height=12}
 # Plotting Monthly RevPAN for each neighborhood
 ggplot(neighborhood_revpan_data, aes(x = year_month, y = RevPAN, color = neighbourhood, group = neighbourhood)) +
   geom_line(size = 1) +
   geom_point(size = 2) +
+  geom_text(data = label_data, aes(label = neighbourhood), hjust = 0, vjust = -0.5, size = 3, check_overlap = TRUE) +
   labs(title = "Monthly RevPAN by Neighborhood",
        x = "Month",
        y = "RevPAN (Revenue per Available Night)") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.title = element_blank()) +
-  scale_color_discrete(name = "Neighborhood")
+        plot.margin = margin(10, 40, 10, 10),
+        legend.position = "right") +
+  scale_color_discrete(name = "Neighborhood") +
+  coord_cartesian(clip = "off")
+```
+The graph shows the Monthly Revenue per Available Night (RevPAN) across different neighborhoods over time. 
+Each line represents a neighborhood, and the y-axis represents the RevPAN, while the x-axis represents the months.
+
+* Observations:
+  ** Variation Across Neighborhoods (שונות בין השכונות):
+    There is a noticeable variation in RevPAN across different neighborhoods. 
+    Some neighborhoods consistently have higher RevPAN, indicating they generate more revenue per available night on average.
+  - Neighborhoods like Financial District and Beacon Hill show higher RevPAN, indicating they generate more revenue per available night compared to other areas.
+  - In contrast, neighborhoods such as Roxbury and Dorchester often have lower RevPAN, suggesting less revenue efficiency.
+
+** Trends Over Time:
+  - The RevPAN values fluctuate over time for most neighborhoods. 
+    Some neighborhoods show a sharp increase or decrease in certain months, while others remain relatively stable.
+  - For example, Back Bay and South End show significant fluctuations in RevPAN over time, with noticeable peaks and troughs, 
+    while neighborhoods like East Boston and Roslindale maintain more stable trends.
+
+** High and Low Performing Areas:
+  - Certain neighborhoods, such as the one with the highest peaks (likely representing high demand or high pricing), outperform others. 
+  Conversely, some neighborhoods consistently have lower RevPAN, indicating less revenue efficiency.
+  - Beacon Hill and Financial District consistently show high RevPAN, indicating strong demand or effective pricing strategies. 
+    Conversely, Roxbury and Mattapan generally display lower RevPAN, highlighting challenges in generating revenue per available night.
+
+** Consistency and Volatility:
+  - Some neighborhoods demonstrate consistency in RevPAN, while others show volatility with significant ups and downs. 
+  This volatility could be due to seasonal factors, special events, or changes in pricing strategy.
+  - Neighborhoods such as North End show consistent performance, 
+    whereas Chinatown and Leather District exhibit more volatility, 
+    possibly due to varying demand or event-driven fluctuations.
+    
+    
+* Business Insights:
+** High-Performing Neighborhoods:
+  - The neighborhoods with higher RevPAN may be areas of strong demand or those with higher listing quality. 
+    These areas could be prioritized for investment or marketing to capitalize on their revenue potential.
+  - Beacon Hill and Financial District are high-performing neighborhoods with strong demand. 
+    These areas could benefit from targeted marketing and investment to further enhance their revenue potential.
+
+** Underperforming Neighborhoods:
+  - Neighborhoods with consistently low RevPAN might need targeted interventions. This could include adjusting pricing strategies, 
+    improving listing quality, or increasing marketing efforts to boost visibility and attractiveness.
+  - Roxbury and Dorchester are underperforming, with consistently low RevPAN. 
+    Strategies such as price adjustments, property improvements, or increased marketing could help attract more guests and improve revenue.
+
+** Seasonal and Temporal Trends:
+  - The fluctuating trends suggest that RevPAN is influenced by seasonal factors. 
+    Understanding these patterns can help in planning for peak and off-peak periods, optimizing pricing, and managing occupancy rates.
+  - Fluctuations in neighborhoods like Back Bay and South End may be due to seasonal events or changes in demand. 
+    Understanding these patterns can help in optimizing pricing and managing occupancy rates during different times of the year.
+
+** Strategic Planning:
+  - The data indicates areas where the business can focus to maximize revenue. 
+    High-performing neighborhoods should be leveraged, while strategies should be developed to address the challenges in lower-performing areas.
+  - The data suggests focusing on neighborhoods like Beacon Hill and Financial District for maximizing revenue while addressing challenges in Roxbury and Dorchester. 
+    This approach ensures a balanced strategy that leverages high-performing areas and improves underperforming ones.
+
+
+נסתכל גם על התפוסה בכל שכונה, זה יעזור לנו להבין עוד יותר טוב אם צריך להוריד מחיר בשכונות מסויימות כדי להעלות את התפוסה ולגרום לצמיחה בשכונה:
+
+```{r, echo=TRUE, fig.width=18, fig.height=12}
+# Plotting Monthly Occupancy Rate for each neighborhood
+ggplot(neighborhood_revpan_data, aes(x = year_month, y = occupancy_rate * 100, color = neighbourhood, group = neighbourhood)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  geom_text(data = label_data, aes(label = neighbourhood), hjust = 0, vjust = -0.5, size = 3, check_overlap = TRUE) +
+  labs(title = "Monthly Occupancy Rate by Neighborhood",
+       x = "Month",
+       y = "Occupancy Rate (%)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.title = element_blank())
 ```
 
+
+
+* Growth Insights per Neighborhood:
+** High Growth Neighborhoods:
+```{r}
+filtered_data <- neighborhood_revpan_data %>%
+  filter(neighbourhood %in% c("Beacon Hill", "Financial District", "North End"))
+
+# Plot the filtered data
+ggplot(filtered_data, aes(x = year_month, y = RevPAN, color = neighbourhood)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Monthly RevPAN for Beacon Hill, North End and Financial District",
+       x = "Month",
+       y = "RevPAN (Revenue per Available Night)",
+       color = "Neighborhood") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 300)  # Set the y-axis limits from 0 to 300 link in the original graph
+```
+```{r}
+# Plotting Monthly Occupancy Rate for the selected neighborhoods
+ggplot(filtered_data, aes(x = year_month, y = occupancy_rate * 100, color = neighbourhood, group = neighbourhood)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Monthly Occupancy Rate for Beacon Hill, North End, and Financial District",
+       x = "Month",
+       y = "Occupancy Rate (%)",
+       color = "Neighborhood") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 100)
+```
+  - Beacon Hill, North End and Financial District show consistent growing RevPAN values, indicating strong growth in revenue generation per available night. 
+    This suggests that these neighborhoods are either attracting more guests, maintaining high prices, or both, which is a positive indicator of growth.
+    
+  - Beacon Hill and North End exhibit relatively high and stable occupancy rates, further supporting their positive performance. 
+    These areas are consistently attracting guests, likely due to favorable location, amenities, or pricing strategies that align well with market demand.
+
+  - The Financial District, despite showing growth in RevPAN, has a lower and more variable occupancy rate. 
+    This could indicate potential issues with guest attraction or retention. 
+    There may be opportunities to increase occupancy through targeted marketing, special offers, or enhanced amenities to make the listings more appealing.
+
+  - Overall, the combination of increasing RevPAN and stable occupancy in most areas points to a healthy and growing business in these neighborhoods. 
+    However, addressing the variability in the Financial District's occupancy could unlock further growth potential, 
+    maximizing revenue and ensuring consistent performance across all neighborhoods.
+
+** Stable Neighborhoods:
+```{r}
+filtered_data <- neighborhood_revpan_data %>%
+  filter(neighbourhood %in% c("Allston-Brighton", "Hyde Park", "Mission Hill"))
+
+# Plot the filtered data
+ggplot(filtered_data, aes(x = year_month, y = RevPAN, color = neighbourhood)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Monthly RevPAN for Allston-Brighton, Hyde Park and Mission Hill",
+       x = "Month",
+       y = "RevPAN (Revenue per Available Night)",
+       color = "Neighborhood") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 300)  # Set the y-axis limits from 0 to 300 link in the original graph
+```
+```{r}
+# Plotting Monthly Occupancy Rate for the selected neighborhoods
+ggplot(filtered_data, aes(x = year_month, y = occupancy_rate * 100, color = neighbourhood, group = neighbourhood)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Monthly Occupancy Rate for Allston-Brighton, Hyde Park and Mission Hill",
+       x = "Month",
+       y = "Occupancy Rate (%)",
+       color = "Neighborhood") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 100)
+```
+
+  - Allston-Brighton, Hyde Park, and Mission Hill: These neighborhoods show relatively stable RevPAN values over time, indicating consistent performance. This stability suggests that these areas have a steady demand and well-balanced pricing strategy, which helps maintain their revenue per available night.
+
+  - Occupancy Rates: The occupancy rates in these neighborhoods are generally moderate, ranging from 20% to 50%. This indicates that while there is demand, there might be potential to increase occupancy through marketing efforts, special offers, or improving property features to attract more guests.
+
+  - Price and Occupancy Strategy: Given the stability in RevPAN and moderate occupancy rates, these neighborhoods might benefit from a targeted strategy to either increase occupancy without lowering prices significantly or to slightly adjust prices to boost RevPAN. This could involve differentiating offerings or focusing on enhancing the guest experience to attract repeat bookings.
+
+** Declining Neighborhoods:
+
+```{r}
+filtered_data <- neighborhood_revpan_data %>%
+  filter(neighbourhood %in% c("Downtown", "Chinatown"))
+
+# Plot the filtered data
+ggplot(filtered_data, aes(x = year_month, y = RevPAN, color = neighbourhood)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Monthly RevPAN for Downtown and Chinatown",
+       x = "Month",
+       y = "RevPAN (Revenue per Available Night)",
+       color = "Neighborhood") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 300)  # Set the y-axis limits from 0 to 300 link in the original graph
+```
+```{r}
+# Plotting Monthly Occupancy Rate for the selected neighborhoods
+ggplot(filtered_data, aes(x = year_month, y = occupancy_rate * 100, color = neighbourhood, group = neighbourhood)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Monthly Occupancy Rate for Downtown and Chinatown",
+       x = "Month",
+       y = "Occupancy Rate (%)",
+       color = "Neighborhood") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 100)
+```
+
+  - The neighborhoods of Chinatown and Downtown show a clear pattern of declining RevPAN, starting with relatively high values and gradually decreasing over the observed period.        This trend indicates a reduction in revenue efficiency per available night, suggesting potential challenges in maintaining occupancy rates or pricing strategies.
+
+  - The accompanying occupancy rate graph highlights that while both neighborhoods started with relatively high occupancy rates, there was a noticeable decline, 
+    particularly in Chinatown. 
+    This drop in occupancy, coupled with the declining RevPAN, suggests a decrease in guest interest or competitiveness of the listings, 
+    possibly due to market saturation, pricing issues, or other external factors.
+  
+** Harvard Square:
+```{r}
+filtered_data <- neighborhood_revpan_data %>%
+  filter(neighbourhood %in% c("Harvard Square"))
+
+# Plot the filtered data
+ggplot(filtered_data, aes(x = year_month, y = RevPAN, color = neighbourhood)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Monthly RevPAN for Harvard Square",
+       x = "Month",
+       y = "RevPAN (Revenue per Available Night)",
+       color = "Neighborhood") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 300)  # Set the y-axis limits from 0 to 300 link in the original graph
+```
+
+```{r}
+# Plotting Monthly Occupancy Rate for the selected neighborhoods
+ggplot(filtered_data, aes(x = year_month, y = occupancy_rate * 100, color = neighbourhood, group = neighbourhood)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Monthly Occupancy Rate for Downtown and Chinatown",
+       x = "Month",
+       y = "Occupancy Rate (%)",
+       color = "Neighborhood") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 100)
+```
+  - The RevPAN for Harvard Square shows a sharp decline from September 2016 to December 2016, with values starting relatively high and then dropping significantly. After December 2016, the RevPAN stabilizes at a lower level, indicating a marked reduction in revenue efficiency per available night. This trend suggests challenges in maintaining competitive pricing or occupancy rates, leading to a need for strategic adjustments in this neighborhood to improve performance. Additionally, the corresponding occupancy rate data reflects a similar trend, with an initial increase followed by a dramatic decline and sustained low levels, highlighting the urgent need for intervention to attract guests and boost revenue.
 
 דעה:
 TODO
