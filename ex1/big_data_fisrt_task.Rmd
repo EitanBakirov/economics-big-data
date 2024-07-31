@@ -431,7 +431,7 @@ By investing in the quality and amenities of their properties, they can achieve 
 # Rename price_dollars to org_price in listings_data
 listings_data_copy <- listings_data %>% rename(org_price = price_dollars)
 # Ensure the host_since is in date format and extract year-month
-listings_data_copy$host_since <- as.Date(listings_data_copy$host_since, format="%m/%d/%Y")
+listings_data_copy$host_since <- as.Date(listings_data_copy$host_since, format="%Y-%m-%d")
 listings_data_copy$host_since_month <- format(listings_data_copy$host_since, "%Y-%m")
 
 # Create copy
@@ -451,7 +451,7 @@ merged_data <- merge(
 ```{r}
 # Ensure data is properly formatted
 merged_data$price_dollars <- as.numeric(gsub("[\\$,]", "", merged_data$price_dollars))
-merged_data$date <- as.Date(merged_data$date, format="%m/%d/%Y")
+merged_data$date <- as.Date(merged_data$date, format="%Y/%m/%d")
 
 # Extract year-month for grouping
 merged_data <- merged_data %>%
@@ -1200,9 +1200,369 @@ The first part is to identify a period of time in which the behavior is abnormal
 
 לאחר מכן, נוכל להבין אם יש טווחי זמן שהם מוזרים: אחוזי תפוסה גבוהים או נמוכים מהרגיל ולפי זה נדע להתמקד על התקופת זמן ולהבין מה קורה שם, אולי זאת תקופת חגים.
 
+Our interpretation of the data is that:
+available_category = 0 is when the listing was listed but was not booked
+available_category = 1 is when the listing was listed and was booked
+no date for a listing is when the listing was not listed at that day
+
+Let's look at the time frame of the data provided:
+
 ```{r}
 #TODO
+
+pacman::p_load(lubridate, visdat, data.table)
+
+print("Hi")
+
+md <- as.data.table(merged_data)
+md <- md[, listing_id, date]
+md <- md[order(date)]
+md <- md[, .N, by=date]
+md
+
 ```
+
+```{r}
+# fwrite(md, "md.csv")
+ggplot(md) +
+  aes(x = date, y = N) +
+  geom_point() +
+  scale_x_date(
+    limits = c(min(md$date),NA),
+    breaks = seq(min(md$date), max(md$date)+1, by = "2 months"),
+    labels = date_format("%Y-%d-%m")
+               )
+```
+
+```{r}
+
+
+ggplot(md) +
+  aes(x = date, y = N) +
+  geom_bar(stat = "summary", fun = "sum", fill = "#112446") +
+  theme_minimal() + 
+  scale_x_date(
+    limits = c(min(md$date),NA),
+    breaks = seq(min(md$date), max(md$date)+1, by = "2 months"),
+    labels = date_format("%Y-%m-%d")
+               )  +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+As we can see, all the data is spread across a one year time frame:
+from 6-9-2016 to 6-9-2017
+
+
+```{r}
+calendar <- as.data.table(calendar_data)
+calendar <- calendar[order(date)]
+calendar <- calendar[, .N, by=.(date, available_category)]
+
+calendar[available_category == 1,.(date, N, available_category='1')]
+
+ggplot(calendar[available_category == 1,.(date, N, available_category=1)]) +
+  aes(x = date, y = N) + 
+  geom_bar(stat = "identity", fun = "sum", fill = "#EF562D") +
+  theme_minimal() +
+  scale_x_date(
+    limits = c(min(calendar$date),NA),
+    breaks = seq(min(md$date), max(md$date)+1, by = "2 months"),
+    labels = date_format("%Y-%m-%d")
+               )
+```
+
+TODO - explain findings - from september...
+
+
+```{r}
+ggplot(calendar[available_category == 0,.(date, N, available_category=1)]) +
+  aes(x = date, y = N) + 
+  geom_bar(stat = "identity", fun = "sum", fill = "#EF562D") +
+  theme_minimal() +
+  scale_x_date(
+    limits = c(min(calendar$date),NA),
+    breaks = seq(min(md$date), max(md$date)+1, by = "2 months"),
+    labels = date_format("%Y-%m-%d")
+               )
+```
+
+```{r}
+excluded_dates <- md[date >= min(md$date) & date <= max(md$date), date]
+# Remove rows from the data.table where the date_col is in the excluded_dates
+filtered_dt <- md[!(date %in% excluded_dates)]
+filtered_dt
+```
+
+```{r}
+calendar <- as.data.table(calendar_data)
+calendar <- calendar[order(date)]
+calendar
+
+# Change values with $ to a number in price_dollar
+calendar[available_category == 1, price_dollars := as.numeric(gsub("\\$", "", price_dollars))]
+anyNA(calendar[available_category == 1, price_dollars])
+
+# Mean price
+mean(calendar$price_dollars, na.rm = TRUE)
+
+mean(calendar[available_category == 1& !is.na(price_dollars), price_dollars])
+
+# Mean price by date
+cat_prices <- calendar[available_category == 1& !is.na(price_dollars), 
+         .(mean_of_price_by_date = mean(price_dollars)), 
+         by = date]
+
+
+ggplot(cat_prices) +
+  aes(x = date, y = mean_of_price_by_date) + 
+  geom_bar(stat = "identity", fun = "sum", fill = "#EF562D") +
+  # theme_minimal() +
+  scale_x_date(
+    limits = c(min(calendar$date),NA),
+    breaks = seq(min(md$date), max(md$date)+1, by = "1 months"),
+    labels = date_format("%Y-%m-%d")
+               ) +
+  scale_y_continuous(
+    breaks = seq(0, max(cat_prices$mean_of_price_by_date, na.rm = TRUE), by = 10)
+  ) +
+  geom_hline(yintercept = seq(0, max(cat_prices$mean_of_price_by_date, na.rm = TRUE), by = 50), 
+             linetype = "dashed", color = "blue") +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+```{r}
+# Calculate occupancy rate per day
+daily_occupancy <- merged_data %>%
+  group_by(date) %>%
+  summarise(
+    total_listings = n(),  # Total listings on this day
+    bookings = sum(available_category == 1, na.rm = TRUE),  # Listings booked on this day
+    occupancy_rate = (bookings / total_listings) * 100  # Occupancy percentage
+  )
+```
+
+```{r}
+daily_occupancy
+```
+
+
+```{r}
+# Plotting the daily occupancy rate
+ggplot(daily_occupancy, aes(x = date, y = occupancy_rate)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 1) +
+  labs(title = "Daily Occupancy Rate",
+       x = "Date",
+       y = "Occupancy Rate (%)") +
+  ylim(0, 100) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+* Observations:
+  - Initial Growth Period (Sept 2016 - Jan 2017):
+    There is a noticeable increase in the occupancy rate from September 2016 to early January 2017. This trend suggests a growing demand for Airbnb listings or an increase in bookings during this period.
+
+  - Stabilization Phase (Jan 2017 - Mar 2017):
+    After reaching a peak in January 2017, the occupancy rate stabilizes around 60%. This could indicate a balance between supply and demand, where the number of available listings is meeting the booking demand consistently.
+  
+  - Decline and Fluctuations (Apr 2017 - Jul 2017):
+    A sharp drop in the occupancy rate is observed around April 2017, followed by a period of lower and more stable occupancy rates. This decline might be due to seasonal factors, changes in the market, or a sudden increase in the number of listings (supply) without a proportional increase in bookings (demand).
+  
+  - Low Variation in Later Periods:
+    After the initial fluctuations, the occupancy rate seems to stabilize around 50%. This steady rate indicates a potentially saturated market where the number of bookings is consistently matched by the number of available listings.
+    
+    
+* Insights:
+  - Seasonality and Demand Trends: The graph suggests that there might be seasonal trends in bookings, with higher occupancy rates observed towards the end of the year (potentially due to holiday travel) and a decline at the beginning of the year. Analyzing this further could help in understanding peak booking periods and optimizing pricing and availability.
+
+  - Market Saturation or Increased Supply: The stabilization of occupancy rates at around 50% could indicate market saturation or an increase in the supply of listings. If the number of listings grows faster than the demand, occupancy rates will naturally decline. This information can be critical for strategic planning, such as focusing on marketing to increase bookings or improving listing quality to stand out.
+
+  - Unusual Patterns or Anomalies: The sharp decline and subsequent stabilization in April 2017 could be due to specific events or changes in market conditions. Further investigation into external factors (like local events, economic changes, or policy shifts) during this period could provide more context.
+
+
+* Strange Patterns:
+  The sharp drop in occupancy rates around April 2017 stands out as unusual. Such a drastic change over a short period suggests an anomaly that warrants further investigation. This could be due to:
+    - Market Over-saturation: A sudden influx of new listings that outpaced demand.
+    - External Events: Possible external factors like new regulations affecting Airbnb listings, seasonal changes, or macroeconomic shifts.
+    - Data Inconsistencies: Potential issues with data collection or reporting that need to be verified.
+
+-----------------------------------
+
+There is an abnormal drop in the daily occupancy rate is observed around early April 2017. This sudden decline in occupancy rates is unusual compared to the periods before and after this time.
+
+```{r}
+# Create a graph focusing on the abnormal period
+ggplot(daily_occupancy, aes(x = date, y = occupancy_rate)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 1) +
+  labs(title = "Daily Occupancy Rate (Highlighting Abnormal Period)",
+       x = "Date",
+       y = "Occupancy Rate (%)") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 100) +
+  annotate("rect", xmin = as.Date("2017-04-01"), xmax = as.Date("2017-04-30"),
+           ymin = 0, ymax = 100, alpha = 0.2, fill = "red") +
+  annotate("text", x = as.Date("2017-04-15"), y = 80, label = "Abnormal Drop", color = "red", size = 4)
+
+```
+* Potential Causes for Abnormal Values
+  - Data Entry Error: It's possible that the data entry during this period contained errors, such as incorrect recording of available or booked nights. This could happen due to manual entry mistakes or system errors. (שגיאה בהזנת הנתונים)
+  - Real-World Events: An unusual event in reality, such as a sudden influx of new listings, a major local event affecting bookings, or changes in regulations that impact Airbnb operations, could cause such a drop. (מקרה אמיתי)
+  - Market Dynamics: An external factor such as a significant price increase or economic downturn might have led to fewer bookings, hence the lower occupancy rate. (דינמיקת שוק)
+
+
+בואו נסתכל על המחיר הממוצע לנכס בכל יום ונבדוק האם הייתה קפיצה במחירים שגרמה לזה
+
+```{r}
+# Calculate the average price per day
+average_price_per_day <- merged_data %>%
+  group_by(date) %>%
+  summarise(average_price = mean(price_dollars, na.rm = TRUE))
+```
+
+
+```{r}
+# Plotting the average price per day
+ggplot(average_price_per_day, aes(x = date, y = average_price)) +
+  geom_line(color = "green", size = 1) +
+  geom_point(color = "green", size = 1) +
+  labs(title = "Daily Average Price",
+       x = "Date",
+       y = "Average Price ($)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, max(average_price_per_day$average_price, na.rm = TRUE) * 1.1)  # Extend y-axis slightly
+
+```
+```{r}
+# Plotting the daily average price with full annotation
+ggplot(average_price_per_day, aes(x = date, y = average_price)) +
+  geom_line(color = "green", size = 1) +
+  geom_point(color = "green", size = 1) +
+  labs(title = "Daily Average Price",
+       x = "Date",
+       y = "Average Price ($)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, max(average_price_per_day$average_price, na.rm = TRUE) * 1.1) +  # Extend y-axis slightly
+  annotate("rect", xmin = as.Date("2017-04-01"), xmax = as.Date("2017-04-30"),
+           ymin = 0, ymax = max(average_price_per_day$average_price, na.rm = TRUE) * 1.1, alpha = 0.2, fill = "red") +
+  annotate("text", x = as.Date("2017-04-15"), y = max(average_price_per_day$average_price, na.rm = TRUE), 
+           label = "Jump in prices", color = "red", size = 4)
+
+```
+
+The graph shows a noticeable spike in the average daily price around April 2017, which coincides with the period where we observed a drop in occupancy rates. This suggests that the increase in prices during this time likely contributed to the decrease in occupancy, as higher prices can deter potential renters, leading to lower booking rates. This correlation indicates that the pricing strategy may have impacted the occupancy rates, and adjusting prices could help optimize occupancy and revenue.
+
+הגרף מראה זינוק ניכר במחיר היומי הממוצע בסביבות אפריל 2017, החופף לתקופה שבה ראינו ירידה בשיעורי התפוסה. זה מצביע על כך שעליית המחירים בתקופה זו תרמה ככל הנראה לירידה בתפוסה, שכן מחירים גבוהים יותר יכולים להרתיע שוכרים פוטנציאליים, מה שמוביל לתעריפי הזמנות נמוכים יותר. מתאם זה מצביע על כך שאסטרטגיית התמחור עשויה להשפיע על שיעורי התפוסה, והתאמת המחירים יכולה לסייע באופטימיזציה של התפוסה וההכנסות.
+
+
+נבדוק ערכים חסרים
+
+```{r}
+summary(merged_data)
+skim(merged_data)
+```
+
+
+נסתכל על מחירי כל נכס שהוצעו להשכרה באותו החודש המוזר
+
+```{r}
+# Filter the data for the specified period
+falling_prices_period <- merged_data %>%
+  filter(date >= as.Date("2017-04-01") & date <= as.Date("2017-04-30"))
+```
+
+נסתכל על המחירים של אותם נכסים אותו החודש
+
+```{r}
+# Create the plot
+ggplot(falling_prices_period, aes(x = date, y = price_dollars)) +
+  geom_point(color = "blue", size = 2) +
+  labs(title = "Listing Prices During April 2017 with Falling Prices",
+       x = "Date",
+       y = "Price ($)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+זה הנכס שמחירו 4000
+
+```{r}
+# Finding the row with a price of $4000
+listing_4000 <- merged_data %>%
+  filter(price_dollars == 4000)
+
+# Display the row
+print(listing_4000)
+
+```
+```{r}
+listing_4000$listing_id
+```
+נסתכל על האם זה ככה בגלל שיש ערכים חריגים במחירים
+
+```{r}
+# Identifying outliers in the data
+boxplot(merged_data$price_dollars, main = "Boxplot of Listing Prices", ylab = "Price ($)")
+```
+Analyze by Neighborhood:
+
+Determine if certain neighborhoods have driven the price increase. You can compare the average prices in different neighborhoods during the period.
+
+```{r}
+# Calculate average price per neighborhood during the period
+average_price_neighbourhood <- merged_data %>%
+  filter(date >= as.Date("2017-04-01") & date <= as.Date("2017-04-30")) %>%
+  group_by(neighbourhood) %>%
+  summarize(average_price = mean(price_dollars, na.rm = TRUE))
+
+# Plot average price per neighborhood
+ggplot(average_price_neighbourhood, aes(x = reorder(neighbourhood, -average_price), y = average_price)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  coord_flip() +
+  labs(title = "Average Price by Neighborhood in April 2017", x = "Neighborhood", y = "Average Price ($)")
+
+```
+Occupancy and Price Relationship:
+Investigate if the price increase correlates with occupancy rates. Higher occupancy rates may indicate higher demand, which could drive up prices.
+
+```{r}
+# Calculating daily occupancy rate and average price
+daily_analysis <- merged_data %>%
+  group_by(date) %>%
+  summarize(
+    average_price = mean(price_dollars, na.rm = TRUE),
+    occupancy_rate = sum(available_category == 1) / n()
+  )
+
+# Plotting occupancy rate vs average price
+ggplot(daily_analysis, aes(x = occupancy_rate, y = average_price)) +
+  geom_point(color = "purple") +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "Occupancy Rate vs Average Price", x = "Occupancy Rate", y = "Average Price ($)")
+
+```
+```{r}
+# Extracting prices for April 2017
+april_prices <- merged_data$price_dollars[merged_data$date >= as.Date("2017-04-01") & merged_data$date <= as.Date("2017-04-30")]
+```
+
+```{r}
+# Create the histogram for all prices
+hist_all <- hist(merged_data$price_dollars, breaks = 80, plot = FALSE)
+
+# Create the histogram for April prices
+hist_april <- hist(april_prices, breaks = hist_all$breaks, plot = FALSE)
+
+# Plotting the histograms
+plot(hist_all, col = rgb(0, 1, 0, 0.5), xlab = "Price ($)", ylab = "Frequency", main = "Histogram of Prices with April 2017 Prices Highlighted", border = "black")
+plot(hist_april, col = rgb(1, 0, 0, 0.5), add = TRUE, border = "black")
+```
+
+
 
 -----------------------------------
 
