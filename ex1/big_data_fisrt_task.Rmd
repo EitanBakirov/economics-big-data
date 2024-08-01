@@ -22,6 +22,7 @@ pacman::p_load(
 )
 library(ggplot2)
 library(scales)
+library(lubridate)
 ```
 
 ## Load Data
@@ -1489,7 +1490,106 @@ na_count
 # Identifying outliers in the data
 boxplot(merged_data$price_dollars, main = "Boxplot of Listing Prices", ylab = "Price ($)")
 ```
-ערכים קיצוניים נגיד יותר מ 2000
+נחלק ל 3 קבוצות:
+Low Price: Listings with prices below the 25th percentile.
+Medium Price: Listings with prices between the 25th and 75th percentiles.
+Expensive: Listings with prices above the 75th percentile.
+
+```{r}
+# Calculate the quantiles for the price groups
+quantiles <- quantile(merged_data$price_dollars, probs = c(0.25, 0.75), na.rm = TRUE)
+low_price_threshold <- quantiles[1]
+medium_price_threshold <- quantiles[2]
+
+# Categorize the listings into price groups
+merged_data <- merged_data %>%
+  mutate(price_group = case_when(
+    price_dollars <= low_price_threshold ~ "Low Price",
+    price_dollars > low_price_threshold & price_dollars <= medium_price_threshold ~ "Medium Price",
+    price_dollars > medium_price_threshold ~ "Expensive"
+  ))
+
+# Display the first few rows with the new price group column
+head(merged_data)
+```
+
+
+```{r}
+# Boxplot of Listing Prices by Price Group
+ggplot(merged_data, aes(x = price_group, y = price_dollars, fill = price_group)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Listing Prices by Group",
+       x = "Price Group",
+       y = "Price ($)") +
+  theme_minimal()
+```
+
+נשתמש בחולקה הזו של הנכסים לראות את המצב בכל חודש. 
+
+```{r}
+# Filter the data to include only the rented properties
+rented_properties <- merged_data %>% filter(available_category == 1)
+
+# Add a month-year column for aggregation
+rented_properties <- rented_properties %>%
+  mutate(month_year = floor_date(date, "month"))
+
+# Calculate the percentage of properties rented in each price group for each month
+monthly_price_group_percentage <- rented_properties %>%
+  group_by(month_year, price_group) %>%
+  summarise(count = n()) %>%
+  group_by(month_year) %>%
+  mutate(total_count = sum(count),
+         percentage = (count / total_count) * 100)
+
+# Plot the percentage of properties rented in each price group for each month
+ggplot(monthly_price_group_percentage, aes(x = month_year, y = percentage, fill = price_group)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  labs(title = "Percentage of Properties Rented by Price Group Each Month",
+       x = "Month-Year",
+       y = "Percentage of Properties Rented",
+       fill = "Price Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+נסתכל על שנת 2017:
+
+```{r}
+# Filter the data to include only the rented properties
+rented_properties <- merged_data %>% filter(available_category == 1)
+
+# Add a month-year column for aggregation
+rented_properties <- rented_properties %>%
+  mutate(month_year = floor_date(date, "month"))
+
+# Filter for the year 2017
+rented_properties_2017 <- rented_properties %>% 
+  filter(year(month_year) == 2017)
+
+# Calculate the percentage of properties rented in each price group for each month
+monthly_price_group_percentage_2017 <- rented_properties_2017 %>%
+  group_by(month_year, price_group) %>%
+  summarise(count = n()) %>%
+  group_by(month_year) %>%
+  mutate(total_count = sum(count),
+         percentage = (count / total_count) * 100)
+
+# Plot the percentage of properties rented in each price group for each month
+ggplot(monthly_price_group_percentage_2017, aes(x = month_year, y = percentage, fill = price_group)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5), size = 3) +
+  labs(title = "Percentage of Properties Rented by Price Group Each Month in 2017",
+       x = "Month-Year",
+       y = "Percentage of Properties Rented",
+       fill = "Price Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+בחודש אפריל נמכרו הנכסים הכי יקרים מבין החודשים ב 2017
+
 
 Occupancy and Price Relationship:
 Investigate if the price increase correlates with occupancy rates. Higher occupancy rates may indicate higher demand, which could drive up prices.
@@ -1512,8 +1612,65 @@ ggplot(daily_analysis, aes(x = occupancy_rate, y = average_price)) +
   labs(title = "Occupancy Rate vs Average Price", x = "Occupancy Rate", y = "Average Price ($)")
 
 ```
+נסתכל על ההפרשים בין המחיר הקטלוג לבין המחיר בפועל
+
+```{r}
+# Calculate the differences between org_price and price_dollars for each day
+merged_data$price_difference <- merged_data$org_price - merged_data$price_dollars
+
+# Create a line plot to visualize the differences over time with monthly x-axis labels
+ggplot(merged_data, aes(x = date, y = price_difference)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 1) +
+  labs(title = "Differences Between Original Price and Actual Price in Dollars",
+       x = "Date",
+       y = "Price Difference ($)") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+ננסה להסתכל על ההפרש הממוצע ליום
+
+```{r}
+# Calculate the differences between org_price and price_dollars for each day
+merged_data$price_difference <- merged_data$org_price - merged_data$price_dollars
+
+# Calculate the average price difference per day
+average_price_difference_per_day <- merged_data %>%
+  group_by(date) %>%
+  summarise(avg_price_difference = mean(price_difference, na.rm = TRUE))
+
+# Create a line plot to visualize the average price difference over time with monthly x-axis labels
+ggplot(average_price_difference_per_day, aes(x = date, y = avg_price_difference)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 1) +
+  labs(title = "Average Differences Between Original Price and Actual Price in Dollars",
+       x = "Date",
+       y = "Average Price Difference ($)") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+באופן כללי זה נראה שהמארחים לא דרשו פחות כסף ממה שהציגו לראשונה באתר כי כל התוצאות שליליות מה שאומר שהמחירים בפועל היו תמיד גבוהים מהמחיר הראשוני שאיתו נרשמו לפלטפורמה.
+
+באפריל 2017 ניכרת צניחה שבה פער המחירים הממוצע הופך לשלילי יותר בהשוואה לחודשים אחרים באותה השנה.
+
+זה מצביע על כך שבמהלך תקופה זו, המחירים בפועל היו גבוהים משמעותית מהמחירים המקוריים, מה שמרמז על כך שהמארחים עלולים להעלות את מחיריהם באופן משמעותי
+
+עליית מחירים זו עשויה להיות מתואמת עם אירועים או גורמים ספציפיים לאותה תקופה, כגון ביקוש גבוה עקב חגים כמו חופשת האביב או אירועים מקומיים אחרים.
+
+לפני ואחרי אפריל 2017, פערי המחירים פחות שליליים, מה שמעיד על כך שהמחירים בפועל היו קרובים יותר או אפילו נמוכים יותר מהמחירים המקוריים.
+
+סה"כ זה נראה מ-2 הגרפים הקודמים שיש בימים בין חודש אפריל ומאי של 2017 הבדל קיצוני בין המחיר קטלוג למחיר ששולם בפועל לעומת שאר החודשים באותה השנה.
+נראה כי המחיר ששולם בפועל גבוה מהקיצוני!
+
+הצניחות החדה באפריל 2017 מצביעה על עלייה משמעותית במחירים בפועל לעומת המחירים המקוריים בחודש זה.
+עליית מחירים זו יכולה הייתה לתרום לירידה בשיעורי התפוסה שנצפתה באותה תקופה, שכן מחירים גבוהים יותר עשויים להרתיע שוכרים פוטנציאליים.
 
 ## Red part analysis
+
+נלקח מהצאט ונדרש עריכה
 
 Red Period: Abnormal Drop in Occupancy and Price Spike (April 2017)
   Abnormal Behavior:
@@ -1534,6 +1691,118 @@ Handling Abnormal Values:
   2. Contextual Investigation: Investigate external factors such as events, policy changes, or market trends that could explain the price spike.
   3. Adjustments or Removal: If these values are determined to be anomalies due to data errors, they should be corrected or removed. 
     If they represent real market behavior, they should be noted but not adjusted, as they provide valuable insights.
+    
+    
+This is the end spring break.
+
+הסתכלות רק על החלק האדום.
+
+
+```{r}
+# Create a graph focusing on the abnormal period
+ggplot(daily_occupancy, aes(x = date, y = occupancy_rate)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 1) +
+  labs(title = "Daily Occupancy Rate (Highlighting Abnormal Period)",
+       x = "Date",
+       y = "Occupancy Rate (%)") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 100) +
+  annotate("rect", xmin = as.Date("2017-04-01"), xmax = as.Date("2017-04-30"),
+           ymin = 0, ymax = 100, alpha = 0.2, fill = "red") +
+  annotate("text", x = as.Date("2017-04-15"), y = 80, label = "Abnormal Drop", color = "red", size = 4)
+```
+```{r}
+# Plotting the daily average price with full annotation
+ggplot(average_price_per_day, aes(x = date, y = average_price)) +
+  geom_line(color = "green", size = 1) +
+  geom_point(color = "green", size = 1) +
+  labs(title = "Daily Average Price",
+       x = "Date",
+       y = "Average Price ($)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, max(average_price_per_day$average_price, na.rm = TRUE) * 1.1) +  # Extend y-axis slightly
+  annotate("rect", xmin = as.Date("2017-04-01"), xmax = as.Date("2017-04-30"),
+           ymin = 0, ymax = max(average_price_per_day$average_price, na.rm = TRUE) * 1.1, alpha = 0.2, fill = "red") +
+  annotate("text", x = as.Date("2017-04-15"), y = max(average_price_per_day$average_price, na.rm = TRUE), 
+           label = "Jump in prices", color = "red", size = 4)
+```
+נסתכל על ההבדל בין מחיר הקלוג לפועל
+```{r}
+# Filter data for the specified period
+discount_data <- merged_data %>%
+  filter(date >= as.Date("2017-04-01") & date <= as.Date("2017-04-30")) %>%
+  select(date, listing_id, price_dollars, org_price)
+
+# Calculate the difference in prices
+discount_data <- discount_data %>%
+  mutate(diff_price = org_price - price_dollars)
+
+# View the first few rows of the data table
+discount_data
+
+```
+נראה שיש דווקא הבדלים!
+
+```{r}
+# Filter the data for the specific time period and availability category
+april_data <- merged_data %>% 
+  filter(date >= as.Date("2017-04-01") & date <= as.Date("2017-04-30") & available_category == 1)
+
+# Calculate the differences between org_price and price_dollars for the filtered data
+april_data$price_difference <- april_data$org_price - april_data$price_dollars
+
+# Create a line plot to visualize the differences over the specified time period
+ggplot(april_data, aes(x = date, y = price_difference)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 1) +
+  labs(title = "Differences Between Original Price and Actual Price in Dollars (April 2017)",
+       x = "Date",
+       y = "Price Difference ($)") +
+  scale_x_date(date_labels = "%b %d", date_breaks = "1 day") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+In the graph, the y-axis represents the difference between the original price (org_price) and the actual price in dollars (price_dollars). If the difference is negative, it means that the actual price paid for the listing was higher than the original price. In other words, the host increased the price above the initial listing price.
+
+Conversely, if the difference is positive, it means that the actual price paid was lower than the original price, indicating that the host provided a discount on the original listing price.
+
+The negative values indicate that the host might have adjusted the prices upwards, possibly due to higher demand or special events during that period.
+
+בגדול רואים שברוב הימים העלו את מחירי הנכסים לעומת המחיר הראשוני ששמו באתר.
+
+(דיברנו על זה למעלה)
+
+
+נסתכל על קבוצת הנכסים שכל נכס נכנס אליה עבור נכסים שהושכרו בחודש הזה
+```{r}
+# Filter data for the specified date range and rented listings
+filtered_data <- merged_data %>%
+  filter(date >= as.Date("2017-04-01") & date <= as.Date("2017-04-30") & available_category == 1)
+
+# Calculate the percentage distribution of listings in each price group
+price_group_distribution <- filtered_data %>%
+  group_by(price_group) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Create a bar plot to visualize the distribution
+ggplot(price_group_distribution, aes(x = price_group, y = percentage, fill = price_group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage Distribution of Rented Listings by Price Group (April 2017)",
+       x = "Price Group",
+       y = "Percentage of Rented Listings (%)") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  scale_fill_manual(values = c("Low Price" = "blue", "Medium Price" = "green", "Expensive" = "red"))
+
+```
+רוב הנכסים שהושכרו באותו חודש היו בעלי מחיר ממוצע.
+ניסיתי לראות אולי בחודש הזה נמכרו נכסים שהם באופן כללי יקרים מהרגיל
+
 
 
 נסתכל על מחירי כל נכס שהוצעו להשכרה באותו החודש המוזר
@@ -1609,7 +1878,11 @@ hist(april_prices,
 ```{r}
 boxplot(april_prices, main = "Boxplot of Prices in April 2017", ylab = "Price ($)")
 ```
+
+
 ## Green part analysis
+
+כנראה נוותר על החלק הזה!
 
 * Green Period: Increase in Occupancy and Price Drop (September 2016 - December 2016)
 Abnormal Behavior:
@@ -1651,7 +1924,7 @@ discount_data <- discount_data %>%
 discount_data
 
 ```
-זה לא מעניין המחירים הם אותו דבר.
+
 
 
 -----------------------------------
