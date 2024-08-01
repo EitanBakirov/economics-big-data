@@ -1295,40 +1295,40 @@ filtered_dt
 ```
 
 ```{r}
-calendar <- as.data.table(calendar_data)
-calendar <- calendar[order(date)]
-calendar
-
-# Change values with $ to a number in price_dollar
-calendar[available_category == 1, price_dollars := as.numeric(gsub("\\$", "", price_dollars))]
-anyNA(calendar[available_category == 1, price_dollars])
-
-# Mean price
-mean(calendar$price_dollars, na.rm = TRUE)
-
-mean(calendar[available_category == 1& !is.na(price_dollars), price_dollars])
-
-# Mean price by date
-cat_prices <- calendar[available_category == 1& !is.na(price_dollars), 
-         .(mean_of_price_by_date = mean(price_dollars)), 
-         by = date]
-
-
-ggplot(cat_prices) +
-  aes(x = date, y = mean_of_price_by_date) + 
-  geom_bar(stat = "identity", fun = "sum", fill = "#EF562D") +
-  # theme_minimal() +
-  scale_x_date(
-    limits = c(min(calendar$date),NA),
-    breaks = seq(min(md$date), max(md$date)+1, by = "1 months"),
-    labels = date_format("%Y-%m-%d")
-               ) +
-  scale_y_continuous(
-    breaks = seq(0, max(cat_prices$mean_of_price_by_date, na.rm = TRUE), by = 10)
-  ) +
-  geom_hline(yintercept = seq(0, max(cat_prices$mean_of_price_by_date, na.rm = TRUE), by = 50), 
-             linetype = "dashed", color = "blue") +
-  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+# calendar <- as.data.table(calendar_data)
+# calendar <- calendar[order(date)]
+# calendar
+# 
+# # Change values with $ to a number in price_dollar
+# calendar[available_category == 1, price_dollars := as.numeric(gsub("\\$", "", price_dollars))]
+# anyNA(calendar[available_category == 1, price_dollars])
+# 
+# # Mean price
+# mean(calendar$price_dollars, na.rm = TRUE)
+# 
+# mean(calendar[available_category == 1& !is.na(price_dollars), price_dollars])
+# 
+# # Mean price by date
+# cat_prices <- calendar[available_category == 1& !is.na(price_dollars), 
+#          .(mean_of_price_by_date = mean(price_dollars)), 
+#          by = date]
+# 
+# 
+# ggplot(cat_prices) +
+#   aes(x = date, y = mean_of_price_by_date) + 
+#   geom_bar(stat = "identity", fun = "sum", fill = "#EF562D") +
+#   # theme_minimal() +
+#   scale_x_date(
+#     limits = c(min(calendar$date),NA),
+#     breaks = seq(min(md$date), max(md$date)+1, by = "1 months"),
+#     labels = date_format("%Y-%m-%d")
+#                ) +
+#   scale_y_continuous(
+#     breaks = seq(0, max(cat_prices$mean_of_price_by_date, na.rm = TRUE), by = 10)
+#   ) +
+#   geom_hline(yintercept = seq(0, max(cat_prices$mean_of_price_by_date, na.rm = TRUE), by = 50), 
+#              linetype = "dashed", color = "blue") +
+#   theme(axis.text.x = element_text(angle = 60, hjust = 1))
 ```
 
 ```{r}
@@ -1405,7 +1405,10 @@ ggplot(daily_occupancy, aes(x = date, y = occupancy_rate)) +
   ylim(0, 100) +
   annotate("rect", xmin = as.Date("2017-04-01"), xmax = as.Date("2017-04-30"),
            ymin = 0, ymax = 100, alpha = 0.2, fill = "red") +
-  annotate("text", x = as.Date("2017-04-15"), y = 80, label = "Abnormal Drop", color = "red", size = 4)
+  annotate("text", x = as.Date("2017-04-15"), y = 80, label = "Abnormal Drop", color = "red", size = 4) + 
+    annotate("rect", xmin = as.Date("2016-09-01"), xmax = as.Date("2016-12-1"),
+           ymin = 0, ymax = 100, alpha = 0.2, fill = "green") +
+  annotate("text", x = as.Date("2016-10-15"), y = 80, label = "Increase in Occupancy", color = "darkgreen", size = 4)
 
 ```
 * Potential Causes for Abnormal Values
@@ -1451,13 +1454,19 @@ ggplot(average_price_per_day, aes(x = date, y = average_price)) +
   annotate("rect", xmin = as.Date("2017-04-01"), xmax = as.Date("2017-04-30"),
            ymin = 0, ymax = max(average_price_per_day$average_price, na.rm = TRUE) * 1.1, alpha = 0.2, fill = "red") +
   annotate("text", x = as.Date("2017-04-15"), y = max(average_price_per_day$average_price, na.rm = TRUE), 
-           label = "Jump in prices", color = "red", size = 4)
+           label = "Jump in prices", color = "red", size = 4) +
+    annotate("rect", xmin = as.Date("2016-09-01"), xmax = as.Date("2016-12-1"),
+           ymin = 0, ymax = max(average_price_per_day$average_price, na.rm = TRUE) * 1.1, alpha = 0.2, fill = "green") +
+  annotate("text", x = as.Date("2016-10-15"), y = max(average_price_per_day$average_price, na.rm = TRUE) * 0.8, 
+           label = "Price drop", color = "darkgreen", size = 4)
 
 ```
 
-The graph shows a noticeable spike in the average daily price around April 2017, which coincides with the period where we observed a drop in occupancy rates. This suggests that the increase in prices during this time likely contributed to the decrease in occupancy, as higher prices can deter potential renters, leading to lower booking rates. This correlation indicates that the pricing strategy may have impacted the occupancy rates, and adjusting prices could help optimize occupancy and revenue.
+התקופה המודגשת באדום: אפריל 2017
+בגרף המחיר הממוצע היומי, ניכר זינוק במחירים בסביבות אפריל 2017, המתיישר עם ירידה חריגה שנצפתה בשיעור התפוסה המוצג בגרף שיעור התפוסה היומי. זה מצביע על מתאם ישיר שבו העלייה במחירים הובילה לירידה במספר ההזמנות. מחירים גבוהים יותר יכולים להרתיע שוכרים פוטנציאליים, במיוחד אם הם עוברים את הערך הנתפס או את סף הנגישות של השוק. זה מצביע על כך שעליית המחירים בתקופה זו ככל הנראה השפיעה לרעה על התפוסה, והדגישה את החשיבות של איזון אסטרטגיות תמחור לשמירה על רמות התפוסה.
 
-הגרף מראה זינוק ניכר במחיר היומי הממוצע בסביבות אפריל 2017, החופף לתקופה שבה ראינו ירידה בשיעורי התפוסה. זה מצביע על כך שעליית המחירים בתקופה זו תרמה ככל הנראה לירידה בתפוסה, שכן מחירים גבוהים יותר יכולים להרתיע שוכרים פוטנציאליים, מה שמוביל לתעריפי הזמנות נמוכים יותר. מתאם זה מצביע על כך שאסטרטגיית התמחור עשויה להשפיע על שיעורי התפוסה, והתאמת המחירים יכולה לסייע באופטימיזציה של התפוסה וההכנסות.
+התקופה המודגשת בירוק: ספטמבר עד דצמבר 2016
+בגרף שיעור התפוסה היומי, אנו רואים עלייה עקבית בתפוסה מספטמבר עד דצמבר 2016, במקביל לירידה הדרגתית במחירים הממוצעים כפי שמתואר בגרף המחיר הממוצע היומי. תקופה זו מעידה על תגובה חיובית בשוק להורדת המחירים, וכתוצאה מכך שיעורי תפוסה גבוהים יותר. ייתכן שהמחירים הנמוכים יותר הפכו את הנכסים לאטרקטיביים יותר עבור שוכרים, מה שהוביל להגדלת ההזמנות. מגמה זו מעידה על גמישות הביקוש בשוק, בו התפוסה רגישה לשינויים במחיר.
 
 
 נבדוק ערכים חסרים
@@ -1466,6 +1475,65 @@ The graph shows a noticeable spike in the average daily price around April 2017,
 summary(merged_data)
 skim(merged_data)
 ```
+
+```{r}
+# Count the number of NA values in price_dollars where available_category == 1
+na_count <- sum(is.na(merged_data$price_dollars[merged_data$available_category == 1]))
+na_count
+```
+כל הדירות שנחשבות לזמינות בעלות מחיר כלשהו
+
+נסתכל על מחירי הנכסים, ננסה להזהות ערכים קיצוניים:
+
+```{r}
+# Identifying outliers in the data
+boxplot(merged_data$price_dollars, main = "Boxplot of Listing Prices", ylab = "Price ($)")
+```
+ערכים קיצוניים נגיד יותר מ 2000
+
+Occupancy and Price Relationship:
+Investigate if the price increase correlates with occupancy rates. Higher occupancy rates may indicate higher demand, which could drive up prices.
+
+נבדוק אם עליית המחירים תואמת את שיעורי התפוסה. שיעורי תפוסה גבוהים עשויים להצביע על ביקוש גבוה יותר, מה שעלול להעלות את המחירים
+
+```{r}
+# Calculating daily occupancy rate and average price
+daily_analysis <- merged_data %>%
+  group_by(date) %>%
+  summarize(
+    average_price = mean(price_dollars, na.rm = TRUE),
+    occupancy_rate = sum(available_category == 1) / n()
+  )
+
+# Plotting occupancy rate vs average price
+ggplot(daily_analysis, aes(x = occupancy_rate, y = average_price)) +
+  geom_point(color = "purple") +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "Occupancy Rate vs Average Price", x = "Occupancy Rate", y = "Average Price ($)")
+
+```
+
+## Red part analysis
+
+Red Period: Abnormal Drop in Occupancy and Price Spike (April 2017)
+  Abnormal Behavior:
+  A significant spike in the average daily price occurred in April 2017, followed by a noticeable drop in the occupancy rate.
+
+Supporting Graph:
+  The "Daily Average Price" graph shows a clear increase in prices during April 2017, while the "Daily Occupancy Rate" graph shows a corresponding decrease in occupancy.
+
+Possible Reasons:
+  1. Market Dynamics: A sudden increase in prices could result from a change in market conditions, 
+    such as high demand during a specific event or season, causing hosts to raise prices.
+  2. Data Entry Errors: This period could include data entry errors where prices were mistakenly recorded at higher levels.
+  3. Special Events: Large-scale events, conventions, or other special events could drive up demand and prices temporarily.
+  4. Policy Changes: Changes in Airbnb policies or local regulations could impact pricing and occupancy.
+
+Handling Abnormal Values:
+  1. Data Validation: Verify the accuracy of the price data during this period to ensure there are no entry errors.
+  2. Contextual Investigation: Investigate external factors such as events, policy changes, or market trends that could explain the price spike.
+  3. Adjustments or Removal: If these values are determined to be anomalies due to data errors, they should be corrected or removed. 
+    If they represent real market behavior, they should be noted but not adjusted, as they provide valuable insights.
 
 
 נסתכל על מחירי כל נכס שהוצעו להשכרה באותו החודש המוזר
@@ -1502,12 +1570,8 @@ print(listing_4000)
 ```{r}
 listing_4000$listing_id
 ```
-נסתכל על האם זה ככה בגלל שיש ערכים חריגים במחירים
 
-```{r}
-# Identifying outliers in the data
-boxplot(merged_data$price_dollars, main = "Boxplot of Listing Prices", ylab = "Price ($)")
-```
+
 Analyze by Neighborhood:
 
 Determine if certain neighborhoods have driven the price increase. You can compare the average prices in different neighborhoods during the period.
@@ -1526,42 +1590,68 @@ ggplot(average_price_neighbourhood, aes(x = reorder(neighbourhood, -average_pric
   labs(title = "Average Price by Neighborhood in April 2017", x = "Neighborhood", y = "Average Price ($)")
 
 ```
-Occupancy and Price Relationship:
-Investigate if the price increase correlates with occupancy rates. Higher occupancy rates may indicate higher demand, which could drive up prices.
 
-```{r}
-# Calculating daily occupancy rate and average price
-daily_analysis <- merged_data %>%
-  group_by(date) %>%
-  summarize(
-    average_price = mean(price_dollars, na.rm = TRUE),
-    occupancy_rate = sum(available_category == 1) / n()
-  )
-
-# Plotting occupancy rate vs average price
-ggplot(daily_analysis, aes(x = occupancy_rate, y = average_price)) +
-  geom_point(color = "purple") +
-  geom_smooth(method = "lm", color = "red") +
-  labs(title = "Occupancy Rate vs Average Price", x = "Occupancy Rate", y = "Average Price ($)")
-
-```
 ```{r}
 # Extracting prices for April 2017
 april_prices <- merged_data$price_dollars[merged_data$date >= as.Date("2017-04-01") & merged_data$date <= as.Date("2017-04-30")]
+april_prices
 ```
+```{r}
+# Create a histogram for the prices in April 2017
+hist(april_prices, 
+     breaks = 50, 
+     col = "blue", 
+     main = "Histogram of Prices in April 2017", 
+     xlab = "Price ($)", 
+     ylab = "Frequency", 
+     border = "black")
+```
+```{r}
+boxplot(april_prices, main = "Boxplot of Prices in April 2017", ylab = "Price ($)")
+```
+## Green part analysis
+
+* Green Period: Increase in Occupancy and Price Drop (September 2016 - December 2016)
+Abnormal Behavior:
+  During this period, there is a significant and sustained increase in the occupancy rate, along with a noticeable drop in average daily prices. 
+  This trend of increased occupancy and decreased prices is consistent over several months.
+
+Supporting Graph:
+  The "Daily Occupancy Rate" graph shows a steady increase in occupancy (מגמת עליה), 
+  while the "Daily Average Price" graph indicates a declining trend in prices during this time frame.
+  
+Possible Reasons:
+  1. Seasonal Variation: The observed increase in occupancy and decrease in prices could be influenced by seasonal factors, 
+    such as an off-peak tourist season where lower prices are set to attract more bookings.
+  2. Promotional Events or Discounts: Hosts may have offered promotions or discounts, resulting in lower prices and higher occupancy rates.
+  3. Market Adjustment: A market adjustment period where prices were reduced to align with demand fluctuations.
+  4. Data Entry Errors: Though consistent trends are less likely to result from data entry errors, it's still possible that some anomalies exist.
+
+Handling Abnormal Values:
+  1. Verification: Confirming the accuracy of the data by comparing it with external events, promotions, or seasonal trends.
+  2. Contextual Analysis: Gaining insight into the local market conditions, events, 
+    or changes in policy can help understand whether these values represent true seasonal trends or anomalies.
+  3. Data Cleaning: If identified as erroneous data, these values should be corrected or flagged. If they reflect actual market behavior, they should be         noted for strategic analysis, rather than removed, as they provide insights into market dynamics.
+
+
+To investigate whether hosts offered discounts during the period from September 2016 to December 2016, we can compare the dollars_Price (actual price listed) with the org_price (original price before any discounts). Here's the R code to create a table with the required information and plot a graph to visualize any differences:
+
 
 ```{r}
-# Create the histogram for all prices
-hist_all <- hist(merged_data$price_dollars, breaks = 80, plot = FALSE)
+# Filter data for the specified period
+discount_data <- merged_data %>%
+  filter(date >= as.Date("2016-09-01") & date <= as.Date("2016-12-31")) %>%
+  select(date, listing_id, price_dollars, org_price)
 
-# Create the histogram for April prices
-hist_april <- hist(april_prices, breaks = hist_all$breaks, plot = FALSE)
+# Calculate the difference in prices
+discount_data <- discount_data %>%
+  mutate(diff_price = org_price - price_dollars)
 
-# Plotting the histograms
-plot(hist_all, col = rgb(0, 1, 0, 0.5), xlab = "Price ($)", ylab = "Frequency", main = "Histogram of Prices with April 2017 Prices Highlighted", border = "black")
-plot(hist_april, col = rgb(1, 0, 0, 0.5), add = TRUE, border = "black")
+# View the first few rows of the data table
+discount_data
+
 ```
-
+זה לא מעניין המחירים הם אותו דבר.
 
 
 -----------------------------------
