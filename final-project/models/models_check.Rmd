@@ -1,0 +1,885 @@
+## Load necessary libraries
+```{r necessary_libraries}
+library(tidyr)
+library(dplyr)
+library(geosphere) 
+library(leaflet)
+library(ggplot2)
+library(lubridate)
+library(readr)
+library(stringr)
+library(corrplot)
+library(car)
+library(gridExtra) #install.packages("gridExtra")
+library(grid)
+
+library(data.table)
+library(zoo)
+
+library(randomForest)
+
+library(Matrix)
+library(xgboost)
+
+library(catboost)
+
+library(forecast)
+
+library(caret)
+```
+
+
+```{r}
+convert_data_types <- function(data, time_col, cols_to_double = NULL, cols_to_int = NULL, date_format = "%d/%m/%Y %H:%M") {
+  setDT(data)
+  if (!is.null(time_col)) {
+    data[[time_col]] <- as.POSIXct(data[[time_col]], format = date_format)
+  }
+  if (!is.null(cols_to_double)) {
+    data[, (cols_to_double) := lapply(.SD, as.numeric), .SDcols = cols_to_double]
+  }
+  if (!is.null(cols_to_int)) {
+    data[, (cols_to_int) := lapply(.SD, as.integer), .SDcols = cols_to_int]
+  }
+  return(data)
+}
+```
+
+
+```{r}
+process_data <- function(file_path, time_col, cols_to_double = NULL, cols_to_int = NULL, date_format = "%d/%m/%Y %H:%M", remove_cols = NULL) {
+  data <- fread(file_path)
+  if (!is.null(remove_cols)) {
+    data[, (remove_cols) := NULL]
+  }
+  data <- convert_data_types(data, time_col, cols_to_double, cols_to_int, date_format)
+  return(data)
+}
+```
+
+
+
+```{r}
+initial_preprocess <- function(data, time_col) {
+  data <- data[number_of_pickups != 0]
+  return(data)
+}
+```
+
+
+
+```{r}
+split_data <- function(data, train_ratio = 0.8) {
+  train_size <- floor(train_ratio * nrow(data))
+  train_data <- data[1:train_size, ]
+  validation_data <- data[(train_size + 1):nrow(data), ]
+  return(list(train = train_data, validation = validation_data))
+}
+```
+
+```{r}
+post_preprocess <- function(data, columns_to_remove = NULL) {
+  if (!is.null(columns_to_remove)) {
+    data[, (columns_to_remove) := NULL]
+  }
+  return(data)
+}
+```
+
+```{r}
+train_linear_model_cv <- function(train_data, target, cv_folds = 5) {
+  
+  # Ensure that train_data is a data frame
+  train_data <- as.data.frame(train_data)
+  
+  # Define features (exclude the target variable)
+  features <- setdiff(names(train_data), target)
+  
+  # Define training control for cross-validation
+  train_control <- trainControl(
+    method = "cv",         # Cross-validation
+    number = cv_folds,     # Number of folds
+    verboseIter = TRUE,
+    savePredictions = "final"  # Save predictions for the best model
+  )
+  
+  # Train linear model with cross-validation using caret
+  set.seed(123)  # For reproducibility
+  model_cv <- train(
+    x = train_data[, features],
+    y = train_data[[target]],
+    method = "lm",
+    trControl = train_control,
+    metric = "RMSE"
+  )
+  
+  # Extract the final model (trained on the full training data)
+  final_model <- model_cv$finalModel
+  
+  # Calculate training MSE
+  train_predictions <- predict(final_model, newdata = train_data)
+  train_mse <- mean((train_data[[target]] - train_predictions)^2)
+  
+  # Calculate cross-validated validation MSE
+  # Retrieve the predictions from cross-validation
+  validation_predictions <- model_cv$pred$pred
+  validation_observed <- model_cv$pred$obs
+  
+  # Calculate validation MSE
+  validation_mse <- mean((validation_observed - validation_predictions)^2)
+  
+  # Extract cross-validation results
+  cv_results <- model_cv$results
+  
+  # Extract coefficients (feature importance)
+  coefficients <- coef(final_model)
+  coefficients_df <- data.frame(
+    Feature = names(coefficients),
+    Coefficient = coefficients
+  )
+  
+  # Return results
+  return(list(
+    model = final_model,
+    train_mse = train_mse,
+    validation_mse = validation_mse,
+    cv_results = cv_results,
+    feature_importance = coefficients_df
+  ))
+}
+
+```
+
+```{r}
+tune_random_forest_cv <- function(train_data, target) {
+  
+  # Define the grid with `mtry` for tuning
+  rf_grid <- expand.grid(
+    mtry = c(10)  # Adjustable values for the number of features considered at each split
+  )
+  
+  # Define the number of trees to be used during training
+  ntree_values <- c(300)  # Test different numbers of trees
+  
+  best_mse <- Inf
+  best_model <- NULL
+  best_params <- list()
+  best_train_mse <- Inf
+  feature_importance <- NULL
+  
+  for (ntree in ntree_values) {
+    # Train with caret using the defined grid
+    tune_rf <- train(
+      as.formula(paste(target, "~ .")),
+      data = train_data,
+      method = "rf",
+      trControl = trainControl(
+        method = "cv",       # Cross-validation method
+        number = 5,          # Number of folds in the cross-validation
+        verboseIter = TRUE   # Print training progress
+      ),
+      tuneGrid = rf_grid,
+      ntree = ntree,
+      metric = "RMSE"
+    )
+    
+    # Best validation RMSE and corresponding parameters
+    best_iteration_params <- tune_rf$bestTune
+    validation_rmse <- min(tune_rf$results$RMSE)
+    
+    # Calculate training MSE for the current model on the entire training set
+    train_predictions <- predict(tune_rf$finalModel, newdata = train_data)
+    train_mse <- mean((train_data[[target]] - train_predictions)^2)
+    
+    # Check if this model has the best validation performance
+    if (validation_rmse^2 < best_mse) {
+      best_mse <- validation_rmse^2
+      best_train_mse <- train_mse
+      best_model <- tune_rf$finalModel
+      best_params <- list(
+        mtry = best_iteration_params$mtry,
+        ntree = ntree
+      )
+      # Extract feature importance for the best model
+      feature_importance <- as.data.frame(importance(best_model))
+    }
+  }
+
+  return(list(
+    model = best_model,
+    best_params = best_params,
+    feature_importance = feature_importance,
+    train_mse = best_train_mse,
+    validation_mse = best_mse
+  ))
+}
+
+```
+
+
+```{r}
+tune_xgboost_cv <- function(train_data, target, cv_folds = 5) {
+  library(caret)
+  library(xgboost)
+  library(dplyr)  # For data manipulation
+  
+  # Define a refined grid for tuning the XGBoost parameters
+  xgb_grid <- expand.grid(
+    nrounds = c(50, 100, 150),
+    max_depth = c(3, 4, 5),
+    eta = c(0.01, 0.05, 0.1),
+    gamma = c(0, 0.1, 0.5),
+    colsample_bytree = c(0.7, 0.8),
+    min_child_weight = c(1, 3),
+    subsample = c(0.7, 0.8)
+  )
+  
+  # Set up cross-validation control
+  train_control <- trainControl(
+    method = "cv",
+    number = cv_folds,
+    verboseIter = TRUE
+  )
+  
+  # Train the model using caret with cross-validation
+  model_cv <- train(
+    as.formula(paste(target, "~ .")),
+    data = train_data,
+    method = "xgbTree",
+    trControl = train_control,
+    tuneGrid = xgb_grid,
+    metric = "RMSE"
+  )
+  
+  # Extract the best model and its parameters
+  best_model <- model_cv$finalModel
+  best_params <- model_cv$bestTune
+  
+  # Calculate training MSE
+  train_predictions <- predict(model_cv, newdata = train_data)
+  train_mse <- mean((train_data[[target]] - train_predictions)^2)
+  
+  # Extract validation RMSE for the best hyperparameters
+  best_result <- model_cv$results %>%
+    filter(
+      nrounds == best_params$nrounds,
+      max_depth == best_params$max_depth,
+      eta == best_params$eta,
+      gamma == best_params$gamma,
+      colsample_bytree == best_params$colsample_bytree,
+      min_child_weight == best_params$min_child_weight,
+      subsample == best_params$subsample
+    )
+  
+  # Ensure that best_result has exactly one row
+  if (nrow(best_result) != 1) {
+    stop("Unable to uniquely identify the best model in model_cv$results.")
+  }
+  
+  validation_rmse <- best_result$RMSE
+  validation_mse <- validation_rmse^2
+  
+  # Extract feature importance
+  feature_importance <- xgb.importance(model = best_model)
+  
+  # Return results
+  return(list(
+    model = best_model,
+    best_params = best_params,
+    train_mse = train_mse,
+    validation_mse = validation_mse,
+    feature_importance = feature_importance
+  ))
+}
+
+```
+
+```{r}
+tune_catboost_cv <- function(train_data, target, cv_folds = 5) {
+  library(catboost)
+  library(data.table)
+  library(caret)  # For creating folds
+  
+  # Ensure train_data is a data.table
+  train_data <- as.data.table(train_data)
+  
+  # Define features (exclude target and any unwanted columns)
+  features <- setdiff(names(train_data), target)
+  
+  # Define hyperparameter grid
+  param_grid <- expand.grid(
+    depth = c(4, 6, 8),
+    learning_rate = c(0.01, 0.05, 0.1)
+    # You can add more hyperparameters if desired
+  )
+  
+  # Initialize variables to store results
+  cv_results <- data.table()
+  
+  # Create cross-validation folds
+  set.seed(123)
+  folds <- createFolds(train_data[[target]], k = cv_folds, list = TRUE, returnTrain = FALSE)
+  
+  # Iterate over each combination of hyperparameters
+  for (i in 1:nrow(param_grid)) {
+    params <- list(
+      depth = param_grid$depth[i],
+      learning_rate = param_grid$learning_rate[i],
+      iterations = 500,
+      loss_function = 'RMSE',
+      eval_metric = 'RMSE',
+      random_seed = 123,
+      use_best_model = TRUE,
+      od_type = 'Iter',
+      od_wait = 20
+    )
+    
+    fold_mse <- c()  # Store validation MSE for each fold
+    
+    # Perform cross-validation
+    for (fold in 1:length(folds)) {
+      validation_idx <- folds[[fold]]
+      training_idx <- setdiff(1:nrow(train_data), validation_idx)
+      
+      training_data_fold <- train_data[training_idx]
+      validation_data_fold <- train_data[validation_idx]
+      
+      # Create CatBoost pools
+      train_pool <- catboost.load_pool(
+        data = training_data_fold[, ..features],
+        label = training_data_fold[[target]]
+      )
+      validation_pool <- catboost.load_pool(
+        data = validation_data_fold[, ..features],
+        label = validation_data_fold[[target]]
+      )
+      
+      # Train the model on the current fold
+      model <- catboost.train(
+        learn_pool = train_pool,
+        test_pool = validation_pool,
+        params = params
+      )
+      
+      # Predict on validation fold
+      validation_predictions <- catboost.predict(model, validation_pool)
+      
+      # Calculate validation MSE
+      mse <- mean((validation_data_fold[[target]] - validation_predictions)^2)
+      fold_mse <- c(fold_mse, mse)
+    }
+    
+    # Calculate average validation MSE across folds
+    avg_validation_mse <- mean(fold_mse)
+    
+    # Store results
+    cv_results <- rbind(cv_results, data.table(
+      depth = params$depth,
+      learning_rate = params$learning_rate,
+      avg_validation_mse = avg_validation_mse
+    ))
+  }
+  
+  # Find the best hyperparameters
+  best_params <- cv_results[which.min(avg_validation_mse)]
+  
+  # Train the final model on the entire training data using the best hyperparameters
+  final_params <- list(
+    depth = best_params$depth,
+    learning_rate = best_params$learning_rate,
+    iterations = 500,
+    loss_function = 'RMSE',
+    eval_metric = 'RMSE',
+    random_seed = 123,
+    use_best_model = TRUE,
+    od_type = 'Iter',
+    od_wait = 20
+  )
+  
+  # Create pool with entire training data
+  train_pool_full <- catboost.load_pool(
+    data = train_data[, ..features],
+    label = train_data[[target]]
+  )
+  
+  # Train the final model
+  final_model <- catboost.train(
+    learn_pool = train_pool_full,
+    params = final_params
+  )
+  
+  # Predict on the training data to get training MSE
+  train_predictions <- catboost.predict(final_model, train_pool_full)
+  train_mse <- mean((train_data[[target]] - train_predictions)^2)
+  
+  # Extract feature importance from the final model
+  feature_importance <- catboost.get_feature_importance(final_model)
+  feature_importance_df <- data.table(
+    Feature = features,
+    Importance = feature_importance
+  )
+  
+  # Return results
+  return(list(
+    model = final_model,
+    best_params = final_params,
+    train_mse = train_mse,
+    validation_mse = best_params$avg_validation_mse,
+    feature_importance = feature_importance_df
+  ))
+}
+```
+
+
+```{r}
+run_models <- function(train_data, target) {
+  results <- list()
+  
+  results$linear_regression <- train_linear_model_cv(train_data, target)
+  
+  results$random_forest <- tune_random_forest_cv(train_data, target)
+  
+  results$xgboost <- tune_xgboost_cv(train_data, target)
+  
+  results$catboost <- tune_catboost_cv(train_data, target)
+  
+  return(results)
+}
+```
+
+
+```{r}
+plot_mse <- function(mse_data_long, plot_title) {
+  
+  ggplot(mse_data_long, aes(x = model, y = mse, fill = type)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    geom_text(
+      aes(label = round(mse, 2)), 
+      position = position_dodge(width = 0.9), 
+      vjust = -0.3, 
+      size = 3.5
+    ) +
+    labs(
+      title = paste("Model Comparison: Training vs Validation MSE - \n", plot_title),
+      x = "Model",
+      y = "Mean Squared Error (MSE)"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(hjust = 0.5)
+    ) +
+    scale_fill_manual(
+      values = c("train_mse" = "blue", "validation_mse" = "red"),
+      name = "MSE Type",
+      labels = c("Full Training MSE", "Avg. Cross-Validation MSE")
+    )
+}
+
+
+```
+
+```{r}
+# Function to prepare the results for visualization
+prepare_results_df <- function(results) {
+  model_names <- names(results)
+  
+  # Extract the MSEs for each model
+  mse_data <- do.call(rbind, lapply(model_names, function(model_name) {
+    result <- results[[model_name]]
+    
+    # Check if the result has both train and validation MSEs
+    if (!is.null(result$train_mse) && !is.null(result$validation_mse)) {
+      data.frame(
+        model = model_name,
+        train_mse = result$train_mse,
+        validation_mse = result$validation_mse
+      )
+    } else {
+      # Print a warning for the model with missing MSEs
+      warning(paste("Model", model_name, "did not produce valid MSE results. Skipping."))
+      NULL
+    }
+  }))
+  
+  # Check if `mse_data` is empty and return an appropriate message or the data
+  if (nrow(mse_data) == 0) {
+    stop("No valid models were found with MSE results.")
+  }
+  
+  # Convert to a long format for easier plotting with ggplot2
+  mse_data_long <- tidyr::pivot_longer(
+    mse_data, 
+    cols = c(train_mse, validation_mse), 
+    names_to = "type", 
+    values_to = "mse"
+  )
+  
+  return(mse_data_long)
+}
+
+```
+
+```{r}
+plot_results <- function(results, title) {
+  
+  mse_data_long <- prepare_results_df(results)
+
+  mse_plot <- plot_mse(mse_data_long, title)
+  print(mse_plot)
+}
+```
+
+
+```{r}
+test_dataset <- function(file_path, time_col, cols_to_double, cols_to_int, remove_cols) {
+  # Step 1: Data Processing
+  data <- process_data(
+    file_path = file_path,
+    time_col = time_col,
+    cols_to_double = cols_to_double,
+    cols_to_int = cols_to_int,
+    remove_cols = remove_cols
+  )
+  
+  # Step 2: Initial Preprocessing
+  data <- initial_preprocess(data, time_col = "time_interval")
+  
+  # Step 4: Post-Split Preprocessing
+  data <- post_preprocess(data, columns_to_remove = "time_interval")
+  
+  # Step 6: Run Models with Grid Search
+  results <- run_models(data, target = "number_of_pickups")
+  
+  # Step 7: Prepare Data for Visualization
+  # mse_data_long <- prepare_results_df(results)
+  
+  # Step 8: Plot the MSEs
+  # mse_plot <- plot_mse(mse_data_long)
+  
+  # Display the plot
+  # print(mse_plot)
+  
+  # Return results for further analysis if needed
+  return(results)
+}
+```
+
+```{r}
+# results_1000 <- test_dataset(file_path = "final_train_filtered_1000m_data.csv",
+#                         time_col = "time_interval",
+#                         cols_to_double = c("feels_like"),
+#                         cols_to_int = c("number_of_pickups", "is_weekend",
+#                                         "is_night", "dayInWeek", "dayInMonth",
+#                                         "month", "hour", "minute",
+#                                         "is_raining_last_hour", "number_of_crashes",
+#                                         "taxis_pickup_count", "total_arrests",
+#                                         "is_holiday", "is_persons_injured"),
+#                         remove_cols = 'V1')
+
+results_2000 <- test_dataset(file_path = "final_train_filtered_2000m_data.csv", 
+                        time_col = "time_interval", 
+                        cols_to_double = c("feels_like"),
+                        cols_to_int = c("number_of_pickups", "is_weekend", 
+                                        "is_night", "dayInWeek", "dayInMonth", 
+                                        "month", "hour", "minute", 
+                                        "is_raining_last_hour", "number_of_crashes", 
+                                        "event_count", "taxis_pickup_count", 
+                                        "total_arrests", "is_holiday", 
+                                        "is_persons_injured"),
+                        remove_cols = 'V1')
+```
+
+```{r}
+results_2000$linear_regression$train_mse
+results_2000$linear_regression$validation_mse
+
+```
+
+
+```{r}
+results_2000$random_forest$train_mse
+results_2000$random_forest$validation_mse
+
+```
+
+```{r}
+results_2000$xgboost$train_mse
+results_2000$xgboost$validation_mse
+```
+
+```{r}
+results_2000$catboost$train_mse
+results_2000$catboost$validation_mse
+```
+
+
+```{r}
+results_1000 <- test_dataset(file_path = "final_train_filtered_1000m_data.csv",
+                        time_col = "time_interval",
+                        cols_to_double = c("feels_like"),
+                        cols_to_int = c("number_of_pickups", "is_weekend",
+                                        "is_night", "dayInWeek", "dayInMonth",
+                                        "month", "hour", "minute",
+                                        "is_raining_last_hour", "number_of_crashes",
+                                        "taxis_pickup_count", "total_arrests",
+                                        "is_holiday", "is_persons_injured"),
+                        remove_cols = 'V1')
+```
+
+```{r}
+results_1000$linear_regression$train_mse
+results_1000$linear_regression$validation_mse
+
+```
+
+
+```{r}
+results_1000$random_forest$train_mse
+results_1000$random_forest$validation_mse
+```
+
+```{r}
+results_1000$xgboost$train_mse
+results_1000$xgboost$validation_mse
+```
+
+```{r}
+results_1000$catboost$train_mse
+results_1000$catboost$validation_mse
+```
+
+
+```{r}
+plot_results(results_1000, "1000M - Before Feature Engineering")
+```
+
+```{r}
+plot_results(results_2000, "2000M - Before Feature Engineering")
+```
+
+
+```{r}
+summary(results_1000$linear_regression$model)
+```
+
+
+
+
+```{r}
+apply_pca_to_numerical <- function(data, numerical_features, scale_data = TRUE, variance_threshold = 0.9) {
+  # Ensure the data is a data.table
+  library(data.table)
+  setDT(data)
+  
+  # Separate the numerical and non-numerical features
+  numerical_data <- data[, ..numerical_features]
+  non_numerical_cols <- setdiff(names(data), numerical_features)
+  
+  # Apply PCA on numerical data
+  pca_result <- prcomp(numerical_data, scale. = scale_data)
+  
+  # Determine the number of components to retain based on the variance threshold
+  cumulative_variance <- cumsum(pca_result$sdev^2) / sum(pca_result$sdev^2)
+  num_components <- which(cumulative_variance >= variance_threshold)[1]
+  
+  # Extract the selected number of PCA components
+  pca_data <- as.data.table(pca_result$x[, 1:num_components])
+  colnames(pca_data) <- paste0("PC", 1:num_components)  # Rename components for clarity
+  
+  # Combine PCA components with original non-numerical columns
+  final_data <- cbind(data[, ..non_numerical_cols], pca_data)
+  
+  # Return the final dataset and the explained variance by selected components
+  return(list(
+    final_data = final_data,
+    explained_variance = cumulative_variance[num_components]
+  ))
+}
+
+
+
+```
+
+
+```{r}
+# Step 1: Data Processing
+data <- process_data(
+  file_path = "final_train_filtered_1000m_data.csv",
+  time_col = "time_interval",
+  cols_to_double = c("feels_like"),
+  cols_to_int = c("number_of_pickups", "is_weekend",
+                  "is_night", "dayInWeek", "dayInMonth",
+                  "month", "hour", "minute",
+                  "is_raining_last_hour", "number_of_crashes",
+                  "taxis_pickup_count", "total_arrests",
+                  "is_holiday", "is_persons_injured"),
+  remove_cols = 'V1'
+)
+
+
+
+# Step 2: Initial Preprocessing
+data <- initial_preprocess(data, time_col = "time_interval")
+
+# Step 4: Post-Split Preprocessing
+data <- post_preprocess(data, columns_to_remove = "time_interval")
+  
+
+```
+
+
+```{r}
+data
+```
+
+
+```{r}
+numerical_features = c("feels_like", "number_of_crashes", "taxis_pickup_count", "total_arrests")
+
+result <- apply_pca_to_numerical(data, numerical_features, variance_threshold = 0.9)
+final_data <- result$final_data
+explained_variance <- result$explained_variance
+cat("Variance explained by selected components:", explained_variance, "\n")
+```
+
+```{r}
+final_data
+```
+
+```{r}
+final_data[, c("dayInMonth", "minute", "is_persons_injured") := NULL]
+```
+```{r}
+final_data
+```
+
+
+```{r}
+results_1000$linear_regression_pca <- train_linear_model_cv(final_data, target = "number_of_pickups")
+```
+
+```{r}
+results_1000$linear_regression_pca$train_mse
+results_1000$linear_regression_pca$validation_mse
+```
+
+
+
+```{r}
+# results_1000$random_forest$feature_importance
+
+# Sort feature importance by IncNodePurity in descending order
+sorted_importance <- results_1000$random_forest$feature_importance %>%
+  arrange(desc(IncNodePurity))
+
+# Display the sorted importance
+print(sorted_importance)
+```
+
+
+```{r}
+# Step 1: Data Processing
+data <- process_data(
+  file_path = "final_train_filtered_1000m_data.csv",
+  time_col = "time_interval",
+  cols_to_double = c("feels_like"),
+  cols_to_int = c("number_of_pickups", "is_weekend",
+                  "is_night", "dayInWeek", "dayInMonth",
+                  "month", "hour", "minute",
+                  "is_raining_last_hour", "number_of_crashes",
+                  "taxis_pickup_count", "total_arrests",
+                  "is_holiday", "is_persons_injured"),
+  remove_cols = 'V1'
+)
+
+
+
+# Step 2: Initial Preprocessing
+data <- initial_preprocess(data, time_col = "time_interval")
+
+# Step 4: Post-Split Preprocessing
+data <- post_preprocess(data, columns_to_remove = "time_interval")
+
+data[, c("is_holiday", "is_persons_injured", "number_of_crashes") := NULL]
+
+results_1000$random_forest_fs <- tune_random_forest_cv(data, target = "number_of_pickups")
+```
+
+
+
+```{r}
+results_1000$random_forest_fs$train_mse
+results_1000$random_forest_fs$validation_mse
+```
+
+
+```{r}
+# results_1000$catboost$feature_importance
+
+# Sort feature importance by IncNodePurity in descending order
+sorted_importance <- results_1000$catboost$feature_importance %>%
+  arrange(desc(Importance.V1))
+
+# Display the sorted importance
+print(sorted_importance)
+```
+
+```{r}
+results_1000$catboost_fs <- tune_catboost_cv(data, target = "number_of_pickups")
+```
+
+```{r}
+results_1000$catboost_fs$train_mse
+results_1000$catboost_fs$validation_mse
+```
+
+
+```{r}
+# results_1000$xgboost$feature_importance
+
+# Sort feature importance by IncNodePurity in descending order
+sorted_importance <- results_1000$xgboost$feature_importance %>%
+  arrange(desc(Gain))
+
+# Display the sorted importance
+print(sorted_importance)
+```
+
+```{r}
+
+# Step 1: Data Processing
+data <- process_data(
+  file_path = "final_train_filtered_1000m_data.csv",
+  time_col = "time_interval",
+  cols_to_double = c("feels_like"),
+  cols_to_int = c("number_of_pickups", "is_weekend",
+                  "is_night", "dayInWeek", "dayInMonth",
+                  "month", "hour", "minute",
+                  "is_raining_last_hour", "number_of_crashes",
+                  "taxis_pickup_count", "total_arrests",
+                  "is_holiday", "is_persons_injured"),
+  remove_cols = 'V1'
+)
+
+
+
+# Step 2: Initial Preprocessing
+data <- initial_preprocess(data, time_col = "time_interval")
+
+# Step 4: Post-Split Preprocessing
+data <- post_preprocess(data, columns_to_remove = "time_interval")
+
+data[, c("minute", "is_persons_injured", "number_of_crashes") := NULL]
+
+results_1000$xgboost_fs <- tune_xgboost_cv(data, target = "number_of_pickups")
+```
+
+```{r}
+results_1000$xgboost_fs$train_mse
+results_1000$xgboost_fs$validation_mse
+
+```
+
+
+
