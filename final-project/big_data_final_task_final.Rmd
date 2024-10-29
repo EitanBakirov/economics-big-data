@@ -4013,8 +4013,8 @@ remove_time_interval <- function(data) {
 ```{r}
 train_filtered_1000m_data <- remove_time_interval(train_filtered_1000m_data)
 train_filtered_2000m_data <- remove_time_interval(train_filtered_2000m_data)
-test_fixed_data_1000 <- remove_time_interval(test_fixed_data_1000)
-test_fixed_data_2000 <- remove_time_interval(test_fixed_data_2000)
+# test_fixed_data_1000 <- remove_time_interval(test_fixed_data_1000)
+# test_fixed_data_2000 <- remove_time_interval(test_fixed_data_2000)
 ```
 
 #### Fix Data Types
@@ -4393,10 +4393,10 @@ predict_test_data <- function(test_data, target, results, model_name) {
   # Access the model information for the specified model dynamically
   model_info <- results[[model_name]]
   
-  # Create a copy of test_data excluding the target column to avoid issues with missing values
-  test_data_no_target <- test_data[, setdiff(names(test_data), target), drop = FALSE]
+  # Create a copy of test_data excluding the target and time_interval columns
+  test_data_no_target <- test_data[, setdiff(names(test_data), c(target, "time_interval")), drop = FALSE]
   
-  # Make predictions on the test data (without the target column)
+  # Make predictions on the test data (without the target and time_interval columns)
   test_predictions <- predict(model_info$model, newdata = test_data_no_target)
   
   # Round predictions down to the nearest integer
@@ -4405,10 +4405,29 @@ predict_test_data <- function(test_data, target, results, model_name) {
   # Fill in the target column with predictions in test_data, converting to integer type
   test_data[[target]] <- as.integer(test_predictions)
   
-  # Return the updated test data with predictions in the target column
+  # Return the updated test data with predictions in the target column and time_interval preserved
   return(test_data)
 }
 ```
+
+Here is the function that saves the predictions on the test with the correct formatting:
+```{r}
+# Function to format test data and write to CSV
+save_predictions_to_csv <- function(test_data_with_predictions, csv_name) {
+  # Select only time_interval and number_of_pickups columns
+  output_data <- test_data_with_predictions[, c("time_interval", "number_of_pickups")]
+  
+  # Format time_interval as "YYYY-MM-DDTHH:MM:SSZ"
+  output_data$time_interval <- format(output_data$time_interval, "%Y-%m-%dT%H:%M:%SZ")
+  
+  # Write to CSV with the specified name
+  write.csv(output_data, file = csv_name, row.names = FALSE)
+  
+  message("Data saved to ", csv_name)
+}
+
+```
+
 
 for 1000:
 ```{r}
@@ -4425,6 +4444,27 @@ test_1000_data_with_predictions <- predict_test_data(
 test_1000_data_with_predictions
 ```
 
+```{r}
+save_predictions_to_csv(test_1000_data_with_predictions, "EinBDW24_final_pred_c1_Yuval_Eitan_Ariel.csv")
+```
+for 2000:
+```{r}
+# Generate predictions and add them to test_data
+test_2000_data_with_predictions <- predict_test_data(
+  test_data = test_fixed_data_2000, 
+  target = "number_of_pickups", 
+  results = results_2000, 
+  model_name = "random_forest"
+)
+```
+
+```{r}
+test_2000_data_with_predictions
+```
+
+```{r}
+save_predictions_to_csv(test_2000_data_with_predictions, "EinBDW24_final_pred_c2_Yuval_Eitan_Ariel.csv")
+```
 
 ##TODEL - FROM DOWN HERE
 #### Spliting the data
