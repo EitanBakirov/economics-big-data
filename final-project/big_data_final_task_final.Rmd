@@ -4013,8 +4013,6 @@ remove_time_interval <- function(data) {
 ```{r}
 train_filtered_1000m_data <- remove_time_interval(train_filtered_1000m_data)
 train_filtered_2000m_data <- remove_time_interval(train_filtered_2000m_data)
-# test_fixed_data_1000 <- remove_time_interval(test_fixed_data_1000)
-# test_fixed_data_2000 <- remove_time_interval(test_fixed_data_2000)
 ```
 
 #### Fix Data Types
@@ -4109,7 +4107,7 @@ test_fixed_data_2000
 ```
 
 ## Part C: Forecast for the Future
-Trying out the models: linear_regression, random_forest, xgboost.
+Trying out the models: linear_regression, random_forest, xgboost, catboost.
 * We will use k-fold cross-validation.
 * Each validation_mse represents the model's average error on validation data during cross-validation for the best parameter settings, not the entire test set.
 
@@ -4321,6 +4319,143 @@ tune_xgboost_cv <- function(train_data, target, cv_folds = 5) {
   ))
 }
 
+```
+
+catboost:
+```{r}
+tune_catboost_cv <- function(train_data, target, cv_folds = 5) {
+  library(catboost)
+  library(data.table)
+  library(caret)  # For creating folds
+  
+  # Ensure train_data is a data.table
+  train_data <- as.data.table(train_data)
+  
+  # Define features (exclude target and any unwanted columns)
+  features <- setdiff(names(train_data), target)
+  
+  # Define hyperparameter grid
+  param_grid <- expand.grid(
+    depth = c(4, 6, 8),
+    learning_rate = c(0.01, 0.05, 0.1)
+    # You can add more hyperparameters if desired
+  )
+  
+  # Initialize variables to store results
+  cv_results <- data.table()
+  
+  # Create cross-validation folds
+  set.seed(123)
+  folds <- createFolds(train_data[[target]], k = cv_folds, list = TRUE, returnTrain = FALSE)
+  
+  # Iterate over each combination of hyperparameters
+  for (i in 1:nrow(param_grid)) {
+    params <- list(
+      depth = param_grid$depth[i],
+      learning_rate = param_grid$learning_rate[i],
+      iterations = 500,
+      loss_function = 'RMSE',
+      eval_metric = 'RMSE',
+      random_seed = 123,
+      use_best_model = TRUE,
+      od_type = 'Iter',
+      od_wait = 20
+    )
+    
+    fold_mse <- c()  # Store validation MSE for each fold
+    
+    # Perform cross-validation
+    for (fold in 1:length(folds)) {
+      validation_idx <- folds[[fold]]
+      training_idx <- setdiff(1:nrow(train_data), validation_idx)
+      
+      training_data_fold <- train_data[training_idx]
+      validation_data_fold <- train_data[validation_idx]
+      
+      # Create CatBoost pools
+      train_pool <- catboost.load_pool(
+        data = training_data_fold[, ..features],
+        label = training_data_fold[[target]]
+      )
+      validation_pool <- catboost.load_pool(
+        data = validation_data_fold[, ..features],
+        label = validation_data_fold[[target]]
+      )
+      
+      # Train the model on the current fold
+      model <- catboost.train(
+        learn_pool = train_pool,
+        test_pool = validation_pool,
+        params = params
+      )
+      
+      # Predict on validation fold
+      validation_predictions <- catboost.predict(model, validation_pool)
+      
+      # Calculate validation MSE
+      mse <- mean((validation_data_fold[[target]] - validation_predictions)^2)
+      fold_mse <- c(fold_mse, mse)
+    }
+    
+    # Calculate average validation MSE across folds
+    avg_validation_mse <- mean(fold_mse)
+    
+    # Store results
+    cv_results <- rbind(cv_results, data.table(
+      depth = params$depth,
+      learning_rate = params$learning_rate,
+      avg_validation_mse = avg_validation_mse
+    ))
+  }
+  
+  # Find the best hyperparameters
+  best_params <- cv_results[which.min(avg_validation_mse)]
+  
+  # Train the final model on the entire training data using the best hyperparameters
+  final_params <- list(
+    depth = best_params$depth,
+    learning_rate = best_params$learning_rate,
+    iterations = 500,
+    loss_function = 'RMSE',
+    eval_metric = 'RMSE',
+    random_seed = 123,
+    use_best_model = TRUE,
+    od_type = 'Iter',
+    od_wait = 20
+  )
+  
+  # Create pool with entire training data
+  train_pool_full <- catboost.load_pool(
+    data = train_data[, ..features],
+    label = train_data[[target]]
+  )
+  
+  # Train the final model
+  final_model <- catboost.train(
+    learn_pool = train_pool_full,
+    params = final_params
+  )
+  
+  # Predict on the training data to get training MSE
+  train_predictions <- catboost.predict(final_model, train_pool_full)
+  train_mse <- mean((train_data[[target]] - train_predictions)^2)
+  
+  # Extract feature importance from the final model
+  feature_importance <- catboost.get_feature_importance(final_model)
+  feature_importance_df <- data.table(
+    Feature = features,
+    Importance = feature_importance
+  )
+  
+  # Return results
+  return(list(
+    model = final_model,
+    best_params = final_params,
+    train_mse = train_mse,
+    validation_mse = best_params$avg_validation_mse,
+    feature_importance = feature_importance_df
+  ))
+}
 ```
 
 Here is the function that runs all the models and save its results in a list:
