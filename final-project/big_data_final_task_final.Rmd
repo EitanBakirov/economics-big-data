@@ -27,6 +27,17 @@ library(gridExtra)
 library(grid)
 library(scales)
 library(zoo)
+
+
+
+library(data.table)
+
+library(randomForest)
+library(Matrix)
+library(xgboost)
+# library(catboost)
+library(forecast)
+library(caret)
 ```
 
 ## Load the CSV files
@@ -374,7 +385,7 @@ plot_top_10_pickup_intervals <- function(data, title, color) {
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1, size = 10), # Adjust text angle and size
       axis.text.y = element_text(size = 10),
-      plot.margin = margin(t = 10, r = 10, b = 50, l = 10)          # Increase bottom margin
+      plot.margin = unit(c(1, 1, 1.5, 1), "cm")          # Increase bottom margin
     ) +
     scale_x_discrete(labels = function(x) str_wrap(x, width = 10))  # Wrap the x-axis labels for better spacing
 }
@@ -972,11 +983,10 @@ We will also add:
 ##### is_weekend
 Add The is_weekend Feature:
 ```{r adding_is_weekend}
-# Function to add 'is_weekend' feature using time_interval
 add_is_weekend <- function(data) {
   data %>%
     mutate(
-      is_weekend = ifelse(wday(time_interval, label = TRUE) %in% c("Sat", "Sun"), 1, 0)  # Check if it's a weekend (Saturday or Sunday)
+      is_weekend = ifelse(wday(time_interval) %in% c(1, 7), 1, 0)  # 1 = Sunday, 7 = Saturday
     )
 }
 ```
@@ -2039,7 +2049,7 @@ plot_categorical_effect <- function(data, categorical_features, label, dataset_n
            title = paste("Effect of", feature, "on", label, "-", dataset_name)) +
       scale_fill_manual(values = c(fill_color, fill_color)) +  # Set custom colors for the boxes
       theme_minimal() +
-      theme(plot.title = element_text(size = 12, hjust = 0.5, margin = margin(b = 10)),
+      theme(plot.title = element_text(size = 12, hjust = 0.5, margin = ggplot2::margin(t = 10, r = 0, b = 10, l = 0)),
             axis.text.x = element_text(size = 10, angle = 0, hjust = 0.5),  # No rotation needed
             axis.text.y = element_text(size = 10),
             axis.title.x = element_text(size = 12),
@@ -3987,6 +3997,436 @@ Lets save to CSVs:
 # write.csv(test_fixed_data_2000, "final_test_fixed_data_2000.csv")
 ```
 
+#### Remove time_interval
+```{r}
+# Function to remove the time_interval column
+remove_time_interval <- function(data) {
+  # Check if the time_interval column exists in the data frame
+  if ("time_interval" %in% names(data)) {
+    # Remove the time_interval column
+    data <- data[ , !names(data) %in% "time_interval"]
+  }
+  return(data)
+}
+```
+
+```{r}
+train_filtered_1000m_data <- remove_time_interval(train_filtered_1000m_data)
+train_filtered_2000m_data <- remove_time_interval(train_filtered_2000m_data)
+test_fixed_data_1000 <- remove_time_interval(test_fixed_data_1000)
+test_fixed_data_2000 <- remove_time_interval(test_fixed_data_2000)
+```
+
+#### Fix Data Types
+```{r}
+# Function to convert specified columns to numeric or integer
+convert_data_types <- function(data, cols_to_double = NULL, cols_to_int = NULL) {
+  # Check if data is a data frame
+  if (!is.data.frame(data)) {
+    stop("Input data must be a data frame.")
+  }
+  
+  # Convert specified columns to numeric (double)
+  if (!is.null(cols_to_double)) {
+    for (col in cols_to_double) {
+      if (col %in% names(data)) {
+        data[[col]] <- as.numeric(data[[col]])
+      } else {
+        warning(paste("Column", col, "not found in data."))
+      }
+    }
+  }
+  
+  # Convert specified columns to integer
+  if (!is.null(cols_to_int)) {
+    for (col in cols_to_int) {
+      if (col %in% names(data)) {
+        data[[col]] <- as.integer(data[[col]])
+      } else {
+        warning(paste("Column", col, "not found in data."))
+      }
+    }
+  }
+  
+  return(data)
+}
+```
+
+```{r}
+train_filtered_1000m_data <- convert_data_types(train_filtered_1000m_data, c("feels_like"),
+                                               c("number_of_pickups", "is_weekend",
+                                                  "is_night", "dayInWeek", "dayInMonth",
+                                                  "month", "hour", "minute",
+                                                  "is_raining_last_hour", "number_of_crashes",
+                                                  "taxis_pickup_count", "total_arrests",
+                                                  "is_holiday", "is_persons_injured"))
+```
+
+```{r}
+train_filtered_1000m_data
+```
+
+```{r}
+test_fixed_data_1000 <- convert_data_types(test_fixed_data_1000, c("feels_like"),
+                                               c("is_weekend",
+                                                  "is_night", "dayInWeek", "dayInMonth",
+                                                  "month", "hour", "minute",
+                                                  "is_raining_last_hour", "number_of_crashes",
+                                                  "taxis_pickup_count", "total_arrests",
+                                                  "is_holiday", "is_persons_injured"))
+```
+
+```{r}
+test_fixed_data_1000
+```
+
+```{r}
+train_filtered_2000m_data <- convert_data_types(train_filtered_2000m_data, c("feels_like"),
+                                               c("number_of_pickups", "is_weekend",
+                                                  "is_night", "dayInWeek", "dayInMonth",
+                                                  "month", "hour", "minute",
+                                                  "is_raining_last_hour", "number_of_crashes",
+                                                  "taxis_pickup_count", "total_arrests",
+                                                  "is_holiday", "is_persons_injured", "event_count"))
+```
+
+```{r}
+train_filtered_2000m_data
+```
+
+```{r}
+test_fixed_data_2000 <- convert_data_types(test_fixed_data_2000, c("feels_like"),
+                                               c("number_of_pickups", "is_weekend",
+                                                  "is_night", "dayInWeek", "dayInMonth",
+                                                  "month", "hour", "minute",
+                                                  "is_raining_last_hour", "number_of_crashes",
+                                                  "taxis_pickup_count", "total_arrests",
+                                                  "is_holiday", "is_persons_injured", "event_count"))
+```
+
+```{r}
+test_fixed_data_2000
+```
+
+## Part C: Forecast for the Future
+Trying out the models: linear_regression, random_forest, xgboost.
+* We will use k-fold cross-validation.
+* Each validation_mse represents the model's average error on validation data during cross-validation for the best parameter settings, not the entire test set.
+
+linear_regression:
+```{r}
+train_linear_model_cv <- function(train_data, target, cv_folds = 5) {
+  
+  # Ensure that train_data is a data frame
+  train_data <- as.data.frame(train_data)
+  
+  # Define features (exclude the target variable)
+  features <- setdiff(names(train_data), target)
+  
+  # Define training control for cross-validation
+  train_control <- trainControl(
+    method = "cv",         # Cross-validation
+    number = cv_folds,     # Number of folds
+    verboseIter = TRUE,
+    savePredictions = "final"  # Save predictions for the best model
+  )
+  
+  # Train linear model with cross-validation using caret
+  set.seed(123)  # For reproducibility
+  model_cv <- train(
+    x = train_data[, features],
+    y = train_data[[target]],
+    method = "lm",
+    trControl = train_control,
+    metric = "RMSE"
+  )
+  
+  # Extract the final model (trained on the full training data)
+  final_model <- model_cv$finalModel
+  
+  # Calculate training MSE
+  train_predictions <- predict(final_model, newdata = train_data)
+  train_mse <- mean((train_data[[target]] - train_predictions)^2)
+  
+  # Calculate cross-validated validation MSE
+  # Retrieve the predictions from cross-validation
+  validation_predictions <- model_cv$pred$pred
+  validation_observed <- model_cv$pred$obs
+  
+  # Calculate validation MSE
+  validation_mse <- mean((validation_observed - validation_predictions)^2)
+  
+  # Extract cross-validation results
+  cv_results <- model_cv$results
+  
+  # Extract coefficients (feature importance)
+  coefficients <- coef(final_model)
+  coefficients_df <- data.frame(
+    Feature = names(coefficients),
+    Coefficient = coefficients
+  )
+  
+  # Return results
+  return(list(
+    model = final_model,
+    train_mse = train_mse,
+    validation_mse = validation_mse,
+    cv_results = cv_results,
+    feature_importance = coefficients_df
+  ))
+}
+
+```
+
+random_forest:
+```{r}
+tune_random_forest_cv <- function(train_data, target) {
+  
+  # Define the grid with `mtry` for tuning
+  rf_grid <- expand.grid(
+    mtry = c(10)  # Adjustable values for the number of features considered at each split
+  )
+  
+  # Define the number of trees to be used during training
+  ntree_values <- c(300)  # Test different numbers of trees
+  
+  best_mse <- Inf
+  best_model <- NULL
+  best_params <- list()
+  best_train_mse <- Inf
+  feature_importance <- NULL
+  
+  for (ntree in ntree_values) {
+    # Train with caret using the defined grid
+    tune_rf <- train(
+      as.formula(paste(target, "~ .")),
+      data = train_data,
+      method = "rf",
+      trControl = trainControl(
+        method = "cv",       # Cross-validation method
+        number = 5,          # Number of folds in the cross-validation
+        verboseIter = TRUE   # Print training progress
+      ),
+      tuneGrid = rf_grid,
+      ntree = ntree,
+      metric = "RMSE"
+    )
+    
+    # Best validation RMSE and corresponding parameters
+    best_iteration_params <- tune_rf$bestTune
+    validation_rmse <- min(tune_rf$results$RMSE)
+    
+    # Calculate training MSE for the current model on the entire training set
+    train_predictions <- predict(tune_rf$finalModel, newdata = train_data)
+    train_mse <- mean((train_data[[target]] - train_predictions)^2)
+    
+    # Check if this model has the best validation performance
+    if (validation_rmse^2 < best_mse) {
+      best_mse <- validation_rmse^2
+      best_train_mse <- train_mse
+      best_model <- tune_rf$finalModel
+      best_params <- list(
+        mtry = best_iteration_params$mtry,
+        ntree = ntree
+      )
+      # Extract feature importance for the best model
+      feature_importance <- as.data.frame(importance(best_model))
+    }
+  }
+
+  return(list(
+    model = best_model,
+    best_params = best_params,
+    feature_importance = feature_importance,
+    train_mse = best_train_mse,
+    validation_mse = best_mse
+  ))
+}
+
+```
+
+xgboost:
+```{r}
+tune_xgboost_cv <- function(train_data, target, cv_folds = 5) {
+  library(caret)
+  library(xgboost)
+  library(dplyr)  # For data manipulation
+  
+  # Define a refined grid for tuning the XGBoost parameters
+  xgb_grid <- expand.grid(
+    nrounds = c(50, 100, 150),
+    max_depth = c(3, 4, 5),
+    eta = c(0.01, 0.05, 0.1),
+    gamma = c(0, 0.1, 0.5),
+    colsample_bytree = c(0.7, 0.8),
+    min_child_weight = c(1, 3),
+    subsample = c(0.7, 0.8)
+  )
+  
+  # Set up cross-validation control
+  train_control <- trainControl(
+    method = "cv",
+    number = cv_folds,
+    verboseIter = TRUE
+  )
+  
+  # Train the model using caret with cross-validation
+  model_cv <- train(
+    as.formula(paste(target, "~ .")),
+    data = train_data,
+    method = "xgbTree",
+    trControl = train_control,
+    tuneGrid = xgb_grid,
+    metric = "RMSE"
+  )
+  
+  # Extract the best model and its parameters
+  best_model <- model_cv$finalModel
+  best_params <- model_cv$bestTune
+  
+  # Calculate training MSE
+  train_predictions <- predict(model_cv, newdata = train_data)
+  train_mse <- mean((train_data[[target]] - train_predictions)^2)
+  
+  # Extract validation RMSE for the best hyperparameters
+  best_result <- model_cv$results %>%
+    filter(
+      nrounds == best_params$nrounds,
+      max_depth == best_params$max_depth,
+      eta == best_params$eta,
+      gamma == best_params$gamma,
+      colsample_bytree == best_params$colsample_bytree,
+      min_child_weight == best_params$min_child_weight,
+      subsample == best_params$subsample
+    )
+  
+  # Ensure that best_result has exactly one row
+  if (nrow(best_result) != 1) {
+    stop("Unable to uniquely identify the best model in model_cv$results.")
+  }
+  
+  validation_rmse <- best_result$RMSE
+  validation_mse <- validation_rmse^2
+  
+  # Extract feature importance
+  feature_importance <- xgb.importance(model = best_model)
+  
+  # Return results
+  return(list(
+    model = best_model,
+    best_params = best_params,
+    train_mse = train_mse,
+    validation_mse = validation_mse,
+    feature_importance = feature_importance
+  ))
+}
+
+```
+
+Here is the function that runs all the models and save its results in a list:
+```{r}
+run_models <- function(train_data, target) {
+  results <- list()
+  
+  results$linear_regression <- train_linear_model_cv(train_data, target)
+  
+  results$random_forest <- tune_random_forest_cv(train_data, target)
+  
+  results$xgboost <- tune_xgboost_cv(train_data, target)
+  
+  # results$catboost <- tune_catboost_cv(train_data, target)
+  
+  return(results)
+}
+```
+
+```{r}
+target <- "number_of_pickups"
+```
+
+for 1000:
+```{r}
+# Run the models and store results in results_1000
+results_1000 <- run_models(train_data = train_filtered_1000m_data, target = target)
+```
+
+Looking at the results:
+```{r}
+results_1000$linear_regression
+```
+```{r}
+results_1000$random_forest
+```
+```{r}
+results_1000$xgboost
+```
+
+for 2000:
+```{r}
+# Run the models and store results in results_2000
+results_2000 <- run_models(train_data = train_filtered_2000m_data, target = target)
+```
+
+Looking at the results:
+```{r}
+results_2000$linear_regression
+```
+
+```{r}
+results_2000$random_forest
+```
+
+```{r}
+results_2000$xgboost
+```
+
+
+Here is the function that  uses the trained models to make predictions on a test set (we will use the model with the lower MSE):
+```{r}
+# Function to predict on test data using a specific trained model and fill in the target column as integers
+predict_test_data <- function(test_data, target, results, model_name) {
+  # Check if the specified model_name exists in results
+  if (!model_name %in% names(results)) {
+    stop(paste("Model", model_name, "not found in results."))
+  }
+  
+  # Access the model information for the specified model dynamically
+  model_info <- results[[model_name]]
+  
+  # Create a copy of test_data excluding the target column to avoid issues with missing values
+  test_data_no_target <- test_data[, setdiff(names(test_data), target), drop = FALSE]
+  
+  # Make predictions on the test data (without the target column)
+  test_predictions <- predict(model_info$model, newdata = test_data_no_target)
+  
+  # Round predictions down to the nearest integer
+  test_predictions <- floor(test_predictions)
+  
+  # Fill in the target column with predictions in test_data, converting to integer type
+  test_data[[target]] <- as.integer(test_predictions)
+  
+  # Return the updated test data with predictions in the target column
+  return(test_data)
+}
+```
+
+for 1000:
+```{r}
+# Generate predictions and add them to test_data
+test_1000_data_with_predictions <- predict_test_data(
+  test_data = test_fixed_data_1000, 
+  target = "number_of_pickups", 
+  results = results_1000, 
+  model_name = "random_forest"
+)
+```
+
+```{r}
+test_1000_data_with_predictions
+```
+
+
+##TODEL - FROM DOWN HERE
 #### Spliting the data
 By splitting the data into training and validation sets, we can train our model on the training set and assess its performance on the validation set. This helps us understand how well our model is likely to perform on new, unseen data. Additionally, inorder to avoid data leaking, and understanding that onehotencoder is based on fitting and transforming, from now on will work with test_train split.
 
@@ -4028,6 +4468,7 @@ Since the test data doesn't include specific locations (latitude, longitude), an
 ## Conclusions
 ```{r conclusion}
 ```
+
 ```{r}
 
 ```
